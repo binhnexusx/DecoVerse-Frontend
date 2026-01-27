@@ -1,54 +1,150 @@
-# React + TypeScript + Vite
+# DecoVerse Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AI-powered interior design platform built with React, Vite, Three.js, and Supabase.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- React 19 + TypeScript
+- Vite 6
+- Tailwind CSS + shadcn/ui
+- Three.js + React Three Fiber
+- Zustand (State Management)
+- Supabase (Database)
+- React Router
+- Vitest + Testing Library
+- ESLint + Prettier + Husky + Commitlint
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js 20.19+ or 22.12+
+- npm 10+
+- Git
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-});
+## Getting Started
+
+### 1. Clone repository
+
+```bash
+git clone https://github.com/your-username/decoverse-frontend.git
+cd decoverse-frontend
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Install dependencies
 
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x";
-import reactDom from "eslint-plugin-react-dom";
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    "react-x": reactX,
-    "react-dom": reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs["recommended-typescript"].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-});
+```bash
+npm install
 ```
+
+### 3. Setup environment variables
+
+Copy the example env file:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` and add your credentials:
+
+```env
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+VITE_API_URL=http://localhost:3000
+```
+
+### 4. Run development server
+
+```bash
+npm run dev
+```
+
+Open http://localhost:5173 in your browser.
+
+## Available Commands
+
+### Development
+
+```bash
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run preview      # Preview production build
+```
+
+### Code Quality
+
+```bash
+npm run lint         # Check code with ESLint
+npm run lint:fix     # Auto-fix ESLint errors
+npm run format       # Format code with Prettier
+```
+
+### Testing
+
+```bash
+npm test             # Run tests
+npm run test:ui      # Run tests with UI
+npm run test:coverage # Generate coverage report
+```
+
+### Docker
+
+```bash
+# Build and run with Docker
+docker build -t decoverse-frontend .
+docker run -p 3001:80 decoverse-frontend
+
+# Or use docker-compose
+docker-compose up --build
+```
+
+## Project Structure
+
+```
+src/
+├── app/
+├── components/
+│   ├── common/         # Shared components
+│   ├── three/          # 3D components
+│   └── ui/             # shadcn/ui components
+├── features/           # Feature modules (design, project, boq)
+├── hooks/              # Custom React hooks
+├── lib/                # Libraries & configurations
+├── services/           # API services
+├── store/              # State management (Zustand)
+├── types/              # TypeScript types
+└── utils/              # Utility functions
+```
+
+## Commit Convention
+
+Follow Conventional Commits format:
+
+```
+feat: add new feature
+fix: resolve bug
+docs: update documentation
+style: format code
+refactor: restructure code
+test: add tests
+chore: update dependencies
+```
+
+Example:
+
+```bash
+git commit -m "feat: add 3D room preview component"
+git commit -m "fix: resolve login error"
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feat/your-feature`
+3. Commit changes: `git commit -m "feat: add your feature"`
+4. Push to branch: `git push origin feat/your-feature`
+5. Open a Pull Request
+
+## Troubleshooting
+
+### Port already in use
+
+If port 5173 is already in use, kill the process or change port in `vite.config.ts`.
