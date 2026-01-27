@@ -25,7 +25,7 @@ AI-powered interior design platform built with React, Vite, Three.js, and Supaba
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/your-username/decoverse-frontend.git
+git clone https://github.com/binhnexusx/DecoVerse-Frontend.git
 cd decoverse-frontend
 ```
 
