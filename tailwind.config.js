@@ -5,12 +5,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        /* ===== CORE COLORS (BẮT BUỘC) ===== */
         border: "hsl(var(--border))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
 
-        /* ===== SIDEBAR COLORS ===== */
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -20,6 +18,18 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+        },
+        primary: {
+          default: "#0CC0DF",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          default: "#0CC0DF/10",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        muted: {
+          DEFAULT: "#E5E7EB",
+          foreground: "hsl(var(--muted-foreground))",
         },
       },
     },
