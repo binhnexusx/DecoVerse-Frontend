@@ -50,7 +50,7 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl bg-white p-5">
+    <div className="flex items-center justify-between rounded-xl bg-surface p-5 shadow-card">
       <div>
         <div className="text-2xl font-bold">{value ?? 0}</div>
         <div className="text-sm text-muted-foreground">{label}</div>
@@ -68,11 +68,14 @@ function StatCard({
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
-  const isCompleted = project.status === PROJECT_STATUS.Completed;
+const STATUS_STYLES: Record<string, string> = {
+  [PROJECT_STATUS.Completed]: "bg-green-100 text-green-600",
+  [PROJECT_STATUS.InProgress]: "bg-blue-100 text-blue-600",
+};
 
+function ProjectCard({ project }: { project: Project }) {
   return (
-    <div className="overflow-hidden rounded-xl bg-white">
+    <div className="overflow-hidden rounded-xl bg-surface shadow-card transition hover:shadow-soft">
       <div className="relative">
         <img
           src={project.image}
@@ -83,9 +86,7 @@ function ProjectCard({ project }: { project: Project }) {
         <span
           className={cn(
             "absolute right-3 top-3 rounded-full px-3 py-1 text-xs font-medium",
-            isCompleted
-              ? "bg-green-100 text-green-600"
-              : "bg-blue-100 text-blue-600"
+            STATUS_STYLES[project.status]
           )}
         >
           {project.status}
@@ -126,7 +127,6 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
-      {" "}
       <Header title="Home" subtitle="Welcome to the homepage!" />
       <div className="space-y-6 px-8">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -144,8 +144,8 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent Projects</h2>
 
-          <Button className="rounded-full bg-cyan-500 hover:bg-cyan-600 text-white">
-            <Plus className="mr-2 h-4 w-4 text-white" />
+          <Button className="rounded-full">
+            <Plus className="mr-2 h-4 w-4" />
             New Project
           </Button>
         </div>
