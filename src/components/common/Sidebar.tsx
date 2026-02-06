@@ -1,48 +1,135 @@
-import { Home, Sparkles, Folder, User, LogOut } from "lucide-react";
+import { useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import {
+  Home,
+  Sparkles,
+  Folder,
+  User,
+  LogOut,
+  Menu,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function Sidebar() {
+const SIDEBAR_WIDTH = {
+  expanded: "w-56",
+  collapsed: "w-16",
+};
+
+type SidebarItemProps = {
+  icon: LucideIcon;
+  label: string;
+  to: string;
+  collapsed: boolean;
+};
+
+function SidebarItem({ icon: Icon, label, to, collapsed }: SidebarItemProps) {
   return (
-    <aside className="w-64 bg-background border-r h-screen flex flex-col justify-between">
-      <div>
-        <div className="p-6 font-bold text-xl">DecoVerse</div>
-
-        <nav className="px-4 space-y-2">
-          <SidebarItem icon={<Home size={18} />} label="Home" active />
-          <SidebarItem icon={<Sparkles size={18} />} label="AI Design" />
-          <SidebarItem icon={<Folder size={18} />} label="Projects" />
-          <SidebarItem icon={<User size={18} />} label="Profile" />
-        </nav>
-      </div>
-
-      <div className="p-4 border-t">
-        <p className="text-sm text-muted-foreground mb-2">Phong Tran</p>
-        <Button variant="ghost" className="w-full justify-start gap-2">
-          <LogOut size={16} />
-          Logout
-        </Button>
-      </div>
-    </aside>
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-colors",
+          isActive
+            ? "bg-cyan-50 text-cyan-600"
+            : "text-slate-500 hover:bg-cyan-50/70 hover:text-cyan-600",
+          collapsed && "justify-center px-2"
+        )
+      }
+    >
+      <Icon className="h-5 w-5 shrink-0" />
+      {!collapsed && <span className="font-medium">{label}</span>}
+    </NavLink>
   );
 }
 
-function SidebarItem({
-  icon,
-  label,
-  active = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-}) {
+export default function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    const confirmed = window.confirm("Are you sure you want to log out?");
+    if (!confirmed) return;
+    navigate("/login");
+  };
+
   return (
-    <div
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer text-sm transition
-        ${active ? "bg-sidebar-accent text-sidebar-primary" : "hover:bg-muted"}
-      `}
+    <aside
+      className={cn(
+        "flex h-screen flex-col bg-white transition-all duration-300",
+        collapsed ? SIDEBAR_WIDTH.collapsed : SIDEBAR_WIDTH.expanded
+      )}
     >
-      {icon}
-      <span>{label}</span>
-    </div>
+      <div className="flex items-center justify-between p-4">
+        {!collapsed && (
+          <img
+            src="/assets/logo.png"
+            alt="DecoVerse Logo"
+            className="mx-auto h-10 w-auto"
+          />
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Toggle sidebar"
+          onClick={() => setCollapsed((prev) => !prev)}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <nav className="flex-1 space-y-1 px-2">
+        <SidebarItem icon={Home} label="Home" to="/" collapsed={collapsed} />
+        <SidebarItem
+          icon={Sparkles}
+          label="AI Design"
+          to="/ai"
+          collapsed={collapsed}
+        />
+        <SidebarItem
+          icon={Folder}
+          label="Projects"
+          to="/projects"
+          collapsed={collapsed}
+        />
+        <SidebarItem
+          icon={User}
+          label="Profile"
+          to="/profile"
+          collapsed={collapsed}
+        />
+      </nav>
+
+      <div className="p-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+            K
+          </div>
+
+          {!collapsed && (
+            <div className="overflow-hidden text-sm">
+              <div className="truncate font-medium">Kim Hiền</div>
+              <div className="truncate text-xs text-muted-foreground">
+                kimhien@decoverse.dev
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Button
+          variant="ghost"
+          onClick={handleLogout}
+          className={cn(
+            "mt-3 w-full gap-2 text-red-500 hover:bg-red-50 hover:text-red-600",
+            collapsed ? "justify-center" : "justify-start"
+          )}
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && "Logout"}
+        </Button>
+      </div>
+    </aside>
   );
 }
