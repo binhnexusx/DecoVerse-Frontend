@@ -12,6 +12,18 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://decoverse.free.beeceptor.com",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
+  },
+
   test: {
     environment: "jsdom",
     globals: true,

@@ -1,21 +1,16 @@
-// import { z } from "zod";
+import { z } from "zod";
+import { ROOM_TYPES } from "@/types/room";
 
-// export const createProjectSchema = z.object({
-//   projectName: z.string().min(1, "Project name is required"),
-//   roomType: z.enum([
-//     "living",
-//     "bedroom",
-//     "kitchen",
-//     "bathroom",
-//     "office",
-//     "dining",
-//     "studio",
-//     "other",
-//   ]),
-//   length: z.coerce.number().positive("Length must be greater than 0"),
-//   width: z.coerce.number().positive("Width must be greater than 0"),
-//   height: z.coerce.number().positive("Height must be greater than 0"),
-//   prompt: z.string().optional(),
-// });
+export const createProjectSchema = z.object({
+  projectName: z.string().nonempty("Project name is required"),
 
-// type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
+  roomType: z.enum(ROOM_TYPES.map((room) => room.key)),
+
+  length: z.number().positive("Length must be greater than 0"),
+
+  width: z.number().positive("Width must be greater than 0"),
+
+  height: z.number().positive("Height must be greater than 0"),
+
+  prompt: z.string().optional(),
+});

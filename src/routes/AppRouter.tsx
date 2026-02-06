@@ -4,14 +4,17 @@ import HomePage from "@/pages/HomePage";
 import NotFound from "@/pages/NotFound";
 import CreateProjectPage from "@/pages/CreateProjectPage";
 import LoginPage from "@/pages/LoginPage";
+import AIGenerateResultPage from "@/pages/AIGenerateResultPage";
 
 function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route element={<MainLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/ai" element={<CreateProjectPage />} />
+        <Route path="/ai/generate" element={<AIGenerateResultPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

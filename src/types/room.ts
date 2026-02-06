@@ -21,3 +21,12 @@ export const ROOM_TYPES = [
 ] as const;
 
 export type RoomType = (typeof ROOM_TYPES)[number]["key"];
+
+export interface CreateProjectPayload {
+  projectName: string;
+  roomType: RoomType;
+  length: number;
+  width: number;
+  height: number;
+  prompt?: string;
+}

@@ -1,35 +1,23 @@
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useNavigate } from "react-router-dom";
 import { FileText, Home, Sparkles, Ruler } from "lucide-react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Header } from "@/components/common/Header";
 import { ROOM_TYPES } from "@/types/room";
-
-const createProjectSchema = z.object({
-  projectName: z.string().nonempty("Project name is required"),
-  roomType: z.enum([
-    "living",
-    "bedroom",
-    "kitchen",
-    "bathroom",
-    "office",
-    "dining",
-    "studio",
-    "other",
-  ]),
-  length: z.number().positive("Length must be a positive number"),
-  width: z.number().positive("Width must be a positive number"),
-  height: z.number().positive("Height must be a positive number"),
-  prompt: z.string().optional(),
-});
+import { createProjectSchema } from "@/schema/project.schema";
 
 type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
 
 export default function CreateProject() {
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
   const {
     register,
     handleSubmit,
@@ -45,8 +33,39 @@ export default function CreateProject() {
 
   const selectedRoomType = watch("roomType");
 
-  const onSubmit = (data: CreateProjectFormValues) => {
-    console.log("FORM DATA 👉", data);
+  const onSubmit = async (data: CreateProjectFormValues) => {
+    try {
+      setLoading(true);
+
+      if (!data.prompt || data.prompt.trim() === "") {
+        navigate("/manual-design", {
+          state: data,
+        });
+        return;
+      }
+
+      const response = await fetch("/api/generate-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate preview");
+      }
+
+      const result = await response.json();
+
+      navigate("/ai/preview", {
+        state: result,
+      });
+    } catch (error) {
+      console.error("Error generating design:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -157,11 +176,17 @@ export default function CreateProject() {
         </section>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" className="rounded-xl">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl"
+            onClick={() => navigate(-1)}
+          >
             Cancel
           </Button>
-          <Button type="submit" className="rounded-xl">
-            Create Project
+
+          <Button type="submit" className="rounded-xl" disabled={loading}>
+            {loading ? "Processing..." : "Create Project"}
           </Button>
         </div>
       </form>
