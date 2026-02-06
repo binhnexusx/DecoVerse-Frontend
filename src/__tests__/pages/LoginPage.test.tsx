@@ -1,7 +1,7 @@
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import LoginPage from "@/pages/LoginPage";
-
-jest.mock("@/components/ui/button", () => ({
+vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: any) => (
     <button {...props}>{children}</button>
   ),
