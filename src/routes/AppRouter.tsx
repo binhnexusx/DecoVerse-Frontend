@@ -9,6 +9,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route element={<MainLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/ai" element={<CreateProjectPage />} />
