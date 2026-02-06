@@ -21,6 +21,9 @@
       "@/*": ["./src/*"]
     },
 
+    /* Types for testing */
+    "types": ["jest", "@testing-library/jest-dom"],
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
