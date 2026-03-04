@@ -1,18 +1,11 @@
-export default App;
 import AppRouter from "./routes/AppRouter";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect } from "react";
 import { syncUserWithBackend } from "./services/user";
 
 function App() {
-  const {
-    loginWithRedirect,
-    // logout,
-    isAuthenticated,
-    user,
-    isLoading,
-    getAccessTokenSilently,
-  } = useAuth0();
+  const { isAuthenticated, user, isLoading, getAccessTokenSilently } =
+    useAuth0();
 
   useEffect(() => {
     const handleSync = async () => {
@@ -21,19 +14,16 @@ function App() {
           const token = await getAccessTokenSilently();
           const displayName =
             user.nickname || user.name || user.email?.split("@")[0] || "";
-
-          const result = await syncUserWithBackend(token, {
+          await syncUserWithBackend(token, {
             email: user.email || "",
             name: displayName,
           });
-
-          console.log("Synchronization successful:", result);
+          console.log("Synchronization successful");
         } catch (error) {
           console.error("Synchronization error:", error);
         }
       }
     };
-
     handleSync();
   }, [isAuthenticated, user, getAccessTokenSilently]);
 
@@ -47,18 +37,9 @@ function App() {
 
   return (
     <div className="w-full h-screen bg-gray-900">
-      {!isAuthenticated ? (
-        <button
-          onClick={() => loginWithRedirect()}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Login
-        </button>
-      ) : (
-        <>
-          <AppRouter />
-        </>
-      )}
+      <AppRouter />
     </div>
   );
 }
+
+export default App;
