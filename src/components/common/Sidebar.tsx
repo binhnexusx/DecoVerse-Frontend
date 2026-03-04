@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   Home,
   Sparkles,
@@ -9,6 +9,7 @@ import {
   Menu,
   type LucideIcon,
 } from "lucide-react";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -46,12 +47,18 @@ function SidebarItem({ icon: Icon, label, to, collapsed }: SidebarItemProps) {
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const navigate = useNavigate();
+
+  const { user, logout } = useAuth0();
 
   const handleLogout = () => {
     const confirmed = window.confirm("Are you sure you want to log out?");
     if (!confirmed) return;
-    navigate("/login");
+
+    logout({
+      logoutParams: {
+        returnTo: window.location.origin + "/",
+      },
+    });
   };
 
   return (
@@ -104,15 +111,22 @@ export default function Sidebar() {
 
       <div className="p-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
-            K
-          </div>
+          {user?.picture ? (
+            <img
+              src={user.picture}
+              alt={user.name}
+              className="h-9 w-9 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+              {user?.name?.charAt(0) || "U"}
+            </div>
+          )}
 
-          {!collapsed && (
+          {!collapsed && user && (
             <div className="overflow-hidden text-sm">
-              <div className="truncate font-medium">Kim Hiền</div>
-              <div className="truncate text-xs text-muted-foreground">
-                kimhien@decoverse.dev
+              <div className="truncate font-medium">
+                {user.nickname || user.name || "Unknown User"}
               </div>
             </div>
           )}
