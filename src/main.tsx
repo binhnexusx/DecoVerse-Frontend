@@ -5,6 +5,7 @@ import { Auth0Provider } from "@auth0/auth0-react";
 import App from "./App";
 import "./index.css";
 
+console.log(import.meta.env.VITE_API_URL);
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Auth0Provider
