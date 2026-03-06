@@ -27,6 +27,7 @@ function AppRouter() {
 
       <Route element={<ProtectedRoute />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route element={<MainLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/ai" element={<CreateProjectPage />} />
