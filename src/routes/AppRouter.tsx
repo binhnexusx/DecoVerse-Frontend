@@ -5,6 +5,7 @@ import HomePage from "@/pages/HomePage";
 import NotFound from "@/pages/NotFound";
 import CreateProjectPage from "@/pages/CreateProjectPage";
 import LoginPage from "@/pages/LoginPage";
+import AIGenerateResultPage from "@/pages/AIGenerateResultPage";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth0();
@@ -13,25 +14,18 @@ const ProtectedRoute = () => {
 
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
-import AIGenerateResultPage from "@/pages/AIGenerateResultPage";
 
 function AppRouter() {
-  const { isAuthenticated } = useAuth0();
-
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
-      />
+      <Route path="/login" element={<LoginPage />} />
 
-      <Route element={<ProtectedRoute />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/ai" element={<CreateProjectPage />} />
-        <Route path="/ai/generate" element={<AIGenerateResultPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/ai" element={<CreateProjectPage />} />
+          <Route path="/ai/generate" element={<AIGenerateResultPage />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFound />} />
