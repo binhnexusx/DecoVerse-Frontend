@@ -12,6 +12,17 @@ import {
 import { useAuth0 } from "@auth0/auth0-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const SIDEBAR_WIDTH = {
   expanded: "w-56",
@@ -47,16 +58,12 @@ function SidebarItem({ icon: Icon, label, to, collapsed }: SidebarItemProps) {
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-
   const { user, logout } = useAuth0();
 
   const handleLogout = () => {
-    const confirmed = window.confirm("Are you sure you want to log out?");
-    if (!confirmed) return;
-
     logout({
       logoutParams: {
-        returnTo: window.location.origin + "/",
+        returnTo: window.location.origin + "/login",
       },
     });
   };
@@ -132,17 +139,36 @@ export default function Sidebar() {
           )}
         </div>
 
-        <Button
-          variant="ghost"
-          onClick={handleLogout}
-          className={cn(
-            "mt-3 w-full gap-2 text-red-500 hover:bg-red-50 hover:text-red-600",
-            collapsed ? "justify-center" : "justify-start"
-          )}
-        >
-          <LogOut className="h-4 w-4" />
-          {!collapsed && "Logout"}
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              className={cn(
+                "mt-3 w-full gap-2 text-red-500 hover:bg-red-50 hover:text-red-600",
+                collapsed ? "justify-center" : "justify-start"
+              )}
+            >
+              <LogOut className="h-4 w-4" />
+              {!collapsed && "Logout"}
+            </Button>
+          </AlertDialogTrigger>
+
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log out?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to log out of your account?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleLogout}>
+                Logout
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </aside>
   );

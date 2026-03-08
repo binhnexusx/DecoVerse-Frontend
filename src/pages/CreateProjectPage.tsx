@@ -37,6 +37,8 @@ export default function CreateProject() {
     try {
       setLoading(true);
 
+      console.log("FORM DATA:", data);
+
       if (!data.prompt || data.prompt.trim() === "") {
         navigate("/manual-design", {
           state: data,
@@ -44,13 +46,16 @@ export default function CreateProject() {
         return;
       }
 
-      const response = await fetch("/api/generate-preview", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
+      const response = await fetch(
+        "http://localhost:3000/api/ai/generate-preview",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to generate preview");
@@ -58,7 +63,9 @@ export default function CreateProject() {
 
       const result = await response.json();
 
-      navigate("/ai/preview", {
+      console.log("AI RESULT:", result);
+
+      navigate("/ai/generate", {
         state: result,
       });
     } catch (error) {
@@ -75,10 +82,10 @@ export default function CreateProject() {
         subtitle="Set up your project and start designing"
       />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 px-8">
-        <section className="rounded-2xl bg-surface p-6 shadow-card">
-          <div className="mb-4 flex items-center gap-2 font-medium">
-            <FileText className="h-5 w-5 text-primary" />
+      <form onSubmit={handleSubmit(onSubmit)} className="px-8 space-y-6">
+        <section className="p-6 rounded-2xl bg-surface shadow-card">
+          <div className="flex items-center gap-2 mb-4 font-medium">
+            <FileText className="w-5 h-5 text-primary" />
             Project Details
           </div>
 
@@ -86,11 +93,13 @@ export default function CreateProject() {
             <label className="text-sm font-medium">
               Project Name <span className="text-red-500">*</span>
             </label>
+
             <Input
               {...register("projectName")}
               placeholder="My New Project"
-              className="h-11 rounded-xl border"
+              className="border h-11 rounded-xl"
             />
+
             {errors.projectName && (
               <p className="text-xs text-red-500">
                 {errors.projectName.message}
@@ -99,9 +108,9 @@ export default function CreateProject() {
           </div>
         </section>
 
-        <section className="rounded-2xl bg-surface p-6 shadow-card">
-          <div className="mb-4 flex items-center gap-2 font-medium">
-            <Home className="h-5 w-5 text-purple-500" />
+        <section className="p-6 rounded-2xl bg-surface shadow-card">
+          <div className="flex items-center gap-2 mb-4 font-medium">
+            <Home className="w-5 h-5 text-purple-500" />
             Room Type
           </div>
 
@@ -122,7 +131,7 @@ export default function CreateProject() {
                       : "hover:bg-muted"
                   )}
                 >
-                  <Icon className="h-6 w-6" />
+                  <Icon className="w-6 h-6" />
                   {room.label}
                 </button>
               );
@@ -130,9 +139,9 @@ export default function CreateProject() {
           </div>
         </section>
 
-        <section className="rounded-2xl bg-surface p-6 shadow-card">
-          <div className="mb-4 flex items-center gap-2 font-medium">
-            <Ruler className="h-5 w-5 text-indigo-500" />
+        <section className="p-6 rounded-2xl bg-surface shadow-card">
+          <div className="flex items-center gap-2 mb-4 font-medium">
+            <Ruler className="w-5 h-5 text-indigo-500" />
             Room Size
           </div>
 
@@ -140,17 +149,19 @@ export default function CreateProject() {
             <Input
               {...register("length", { valueAsNumber: true })}
               placeholder="Length (m)"
-              className="h-11 rounded-xl border"
+              className="border h-11 rounded-xl"
             />
+
             <Input
               {...register("width", { valueAsNumber: true })}
               placeholder="Width (m)"
-              className="h-11 rounded-xl border"
+              className="border h-11 rounded-xl"
             />
+
             <Input
               {...register("height", { valueAsNumber: true })}
               placeholder="Height (m)"
-              className="h-11 rounded-xl border"
+              className="border h-11 rounded-xl"
             />
           </div>
 
@@ -161,9 +172,9 @@ export default function CreateProject() {
           )}
         </section>
 
-        <section className="rounded-2xl bg-surface p-6 shadow-card">
-          <div className="mb-4 flex items-center gap-2 font-medium">
-            <Sparkles className="h-5 w-5 text-cyan-500" />
+        <section className="p-6 rounded-2xl bg-surface shadow-card">
+          <div className="flex items-center gap-2 mb-4 font-medium">
+            <Sparkles className="w-5 h-5 text-cyan-500" />
             AI Design Prompt
           </div>
 
