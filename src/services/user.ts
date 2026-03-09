@@ -3,7 +3,7 @@ export const syncUserWithBackend = async (
   userData: { email: string; name: string }
 ) => {
   try {
-    const response = await fetch("http://localhost:3001/api/users/sync", {
+    const response = await fetch("http://localhost:3000/api/users/sync", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
