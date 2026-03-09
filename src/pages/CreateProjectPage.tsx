@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { Header } from "@/components/common/Header";
 import { ROOM_TYPES } from "@/types/room";
 import { createProjectSchema } from "@/schema/project.schema";
+import { API_BASE } from "@/lib/api";
 
 type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
 
@@ -36,38 +37,28 @@ export default function CreateProject() {
   const onSubmit = async (data: CreateProjectFormValues) => {
     try {
       setLoading(true);
-
+      console.log("API_BASE:", API_BASE);
       console.log("FORM DATA:", data);
 
       if (!data.prompt || data.prompt.trim() === "") {
-        navigate("/manual-design", {
-          state: data,
-        });
+        navigate("/manual-design", { state: data });
         return;
       }
 
-      const response = await fetch(
-        "http://localhost:3000/api/ai/generate-preview",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(data),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to generate preview");
-      }
-
-      const result = await response.json();
-
-      console.log("AI RESULT:", result);
-
-      navigate("/ai/generate", {
-        state: result,
+      const response = await fetch(`${API_BASE}/ai/generate-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
       });
+
+      console.log("Status:", response.status);
+      const responseText = await response.text();
+      console.log("Response:", responseText);
+
+      if (!response.ok) throw new Error("Failed to generate preview");
+
+      const result = JSON.parse(responseText);
+      navigate("/ai/generate", { state: result });
     } catch (error) {
       console.error("Error generating design:", error);
     } finally {

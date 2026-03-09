@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, ScanSearch, Box } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { API_BASE } from "@/lib/api";
 
 interface RoomObject {
   id: string;
@@ -40,7 +41,7 @@ export default function AIGenerateResult() {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:3000/api/ai/analyze", {
+      const response = await fetch(`${API_BASE}/ai/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: data.imageUrl }),
@@ -213,7 +214,6 @@ export default function AIGenerateResult() {
       <h1 className="text-2xl font-bold">AI Generated Result</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* ─── LEFT: Ảnh generate ──────────────────────────────────────── */}
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">
             {analyzeResult
@@ -231,7 +231,6 @@ export default function AIGenerateResult() {
               className="object-cover w-full rounded-xl"
             />
 
-            {/* Overlay khi hover */}
             {!analyzing && !analyzeResult && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 transition-opacity opacity-0 bg-black/50 rounded-xl group-hover:opacity-100">
                 <ScanSearch className="w-10 h-10 text-white" />
@@ -241,7 +240,6 @@ export default function AIGenerateResult() {
               </div>
             )}
 
-            {/* Overlay loading */}
             {analyzing && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 rounded-xl">
                 <Loader2 className="w-10 h-10 text-white animate-spin" />
@@ -255,7 +253,6 @@ export default function AIGenerateResult() {
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
-        {/* ─── RIGHT: 3D Scene hoặc placeholder ───────────────────────── */}
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <Box className="w-4 h-4" />
@@ -267,7 +264,6 @@ export default function AIGenerateResult() {
             className="overflow-hidden border bg-muted rounded-2xl"
             style={{ height: "450px" }}
           >
-            {/* Placeholder khi chưa analyze */}
             {!analyzeResult && !analyzing && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
                 <Box className="w-16 h-16 opacity-20" />
@@ -278,7 +274,6 @@ export default function AIGenerateResult() {
             )}
           </div>
 
-          {/* Objects list */}
           {analyzeResult && (
             <div className="p-4 space-y-2 text-sm border rounded-xl bg-surface">
               <p className="font-semibold">
@@ -304,7 +299,6 @@ export default function AIGenerateResult() {
         </div>
       </div>
 
-      {/* ─── Actions ──────────────────────────────────────────────────────── */}
       <div className="flex gap-3">
         <Button variant="outline" onClick={() => navigate(-1)}>
           Back
