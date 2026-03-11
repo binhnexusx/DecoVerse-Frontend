@@ -23,8 +23,11 @@ function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
-          <Route path="/ai" element={<CreateProjectPage />} />
-          <Route path="/ai/generate" element={<AIGenerateResultPage />} />
+
+          <Route path="/ai">
+            <Route index element={<CreateProjectPage />} />
+            <Route path="generate" element={<AIGenerateResultPage />} />
+          </Route>
         </Route>
       </Route>
 
