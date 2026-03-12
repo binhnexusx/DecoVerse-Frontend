@@ -1,38 +1,37 @@
-import type { HomeStats } from "@/types/home";
-import type { Project } from "@/types/project";
-import { PROJECT_STATUS } from "@/types/project";
+import axios from "axios";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = "/api";
 
-export const getHomeStats = async (): Promise<HomeStats> => {
-  await delay(800);
+const getAuthHeaders = (token: string) => ({
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+});
 
-  return {
-    totalProjects: 12,
-    aiGenerated: 48,
-    activeCollaborations: 5,
-  };
+export const getRecentProjects = async (token: string) => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/projects`,
+      getAuthHeaders(token)
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error retrieving project list:", error);
+    throw error;
+  }
 };
 
-export const getRecentProjects = async (): Promise<Project[]> => {
-  await delay(1000);
+export const getHomeStats = async (token: string) => {
+  try {
+    const projects = await getRecentProjects(token);
+    const total = Array.isArray(projects) ? projects.length : 0;
 
-  return [
-    {
-      id: 1,
-      title: "Modern Living Room",
-      category: "Living Room",
-      status: PROJECT_STATUS.InProgress,
-      image: "https://images.unsplash.com/photo-1615873968403-89e068629265",
-      createdAt: "2023-10-01T10:00:00Z",
-    },
-    {
-      id: 2,
-      title: "Minimalist Bedroom",
-      category: "Bedroom",
-      status: PROJECT_STATUS.Completed,
-      image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
-      createdAt: "2023-09-30T10:00:00Z",
-    },
-  ];
+    return {
+      totalProjects: total,
+      aiGenerated: total,
+      activeCollaborations: 0,
+    };
+  } catch (error) {
+    return { totalProjects: 0, aiGenerated: 0, activeCollaborations: 0 };
+  }
 };

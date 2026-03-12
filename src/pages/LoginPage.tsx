@@ -49,7 +49,13 @@ export default function LoginPage() {
 
           <Button
             className="h-12 w-full rounded-xl bg-primary text-primary-foreground text-base hover:bg-primary-600"
-            onClick={() => loginWithRedirect()}
+            onClick={() =>
+              loginWithRedirect({
+                authorizationParams: {
+                  audience: "https://api.decoverse.com",
+                },
+              })
+            }
           >
             Log in
           </Button>

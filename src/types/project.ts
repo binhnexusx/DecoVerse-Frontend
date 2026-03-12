@@ -8,8 +8,8 @@ export type ProjectStatus =
 
 export type Project = {
   id: number;
-  title: string;
-  image: string;
+  name: string;
+  previewUrl: string;
   category: string;
   status: ProjectStatus;
   createdAt: string;
