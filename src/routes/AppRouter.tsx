@@ -7,6 +7,8 @@ import CreateProjectPage from "@/pages/CreateProjectPage";
 import LoginPage from "@/pages/LoginPage";
 import AIGenerateResultPage from "@/pages/AIGenerateResultPage";
 import AdminPage from "@/pages/Adminpage";
+import ProjectDetailPage from "@/pages/ProjectDetailPage";
+import ProjectsPage from "@/pages/ProjectsPage";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth0();
@@ -27,6 +29,8 @@ function AppRouter() {
           <Route path="/ai" element={<CreateProjectPage />} />
           <Route path="/ai/generate" element={<AIGenerateResultPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<ProjectDetailPage />} />
         </Route>
       </Route>
 
