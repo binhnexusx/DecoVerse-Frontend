@@ -78,28 +78,27 @@ function ProjectCard({ project }: { project: Project }) {
     <div className="overflow-hidden rounded-xl bg-surface shadow-card transition hover:shadow-soft">
       <div className="relative">
         <img
-          src={project.image}
-          alt={project.title}
+          src={project.previewUrl}
+          alt={project.name}
           className="h-48 w-full object-cover"
         />
 
         <span
           className={cn(
             "absolute right-3 top-3 rounded-full px-3 py-1 text-xs font-medium",
-            STATUS_STYLES[project.status]
+            STATUS_STYLES[project.status || "Completed"]
           )}
         >
-          {project.status}
+          {project.status || "Completed"}
         </span>
       </div>
 
       <div className="space-y-1 p-4">
-        <div className="font-medium">{project.title}</div>
-        <div className="text-sm text-muted-foreground">{project.category}</div>
+        <div className="font-medium text-lg">{project.name}</div>
 
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2">
           <Clock className="h-3 w-3" />
-          {new Date(project.createdAt).toLocaleDateString()}
+          {new Date(project.createdAt).toLocaleDateString("vi-VN")}
         </div>
       </div>
     </div>
@@ -151,9 +150,10 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {projects.map((project) => (
-            <MemoizedProjectCard key={project.id} project={project} />
-          ))}
+          {Array.isArray(projects) &&
+            projects.map((project) => (
+              <MemoizedProjectCard key={project.id} project={project} />
+            ))}
         </div>
       </div>
     </div>
