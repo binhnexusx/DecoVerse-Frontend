@@ -1,9 +1,11 @@
+import { API_BASE } from "@/lib/api";
+
 export const syncUserWithBackend = async (
   token: string,
   userData: { email: string; name: string }
 ) => {
   try {
-    const response = await fetch("http://localhost:3000/api/users/sync", {
+    const response = await fetch(`${API_BASE}/users/sync`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
