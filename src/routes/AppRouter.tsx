@@ -6,6 +6,7 @@ import NotFound from "@/pages/NotFound";
 import CreateProjectPage from "@/pages/CreateProjectPage";
 import LoginPage from "@/pages/LoginPage";
 import AIGenerateResultPage from "@/pages/AIGenerateResultPage";
+import AdminPage from "@/pages/Adminpage";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth0();
@@ -23,11 +24,9 @@ function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomePage />} />
-
-          <Route path="/ai">
-            <Route index element={<CreateProjectPage />} />
-            <Route path="generate" element={<AIGenerateResultPage />} />
-          </Route>
+          <Route path="/ai" element={<CreateProjectPage />} />
+          <Route path="/ai/generate" element={<AIGenerateResultPage />} />
+          <Route path="/admin" element={<AdminPage />} />
         </Route>
       </Route>
 
