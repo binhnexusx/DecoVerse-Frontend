@@ -1,10 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, ScanSearch, Box } from "lucide-react";
+import { Loader2, ScanSearch, Box, Save } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { API_BASE } from "@/lib/api";
+import { useAuth0 } from "@auth0/auth0-react";
 
 interface RoomObject {
   id: string;
@@ -21,10 +22,26 @@ interface AnalyzeResult {
   objects: RoomObject[];
 }
 
+interface LocationState {
+  imageUrl: string;
+  publicId: string;
+  projectName: string;
+  roomType: string;
+  prompt: string;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+}
+
 export default function AIGenerateResult() {
+  const [saving, setSaving] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const data = location.state as { imageUrl: string; publicId: string } | null;
+  const { getAccessTokenSilently } = useAuth0();
+
+  const data = location.state as LocationState | null;
 
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(
@@ -48,7 +65,6 @@ export default function AIGenerateResult() {
       });
 
       if (!response.ok) throw new Error("Analysis failed");
-
       const result: AnalyzeResult = await response.json();
       setAnalyzeResult(result);
     } catch (err) {
@@ -56,6 +72,43 @@ export default function AIGenerateResult() {
       setError("Failed to analyze image. Please try again.");
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleSaveProject = async () => {
+    if (!analyzeResult || !data) return;
+
+    setSaving(true);
+    try {
+      const token = await getAccessTokenSilently();
+
+      const payload = {
+        name: data.projectName,
+        prompt: data.prompt,
+        previewUrl: data.imageUrl,
+        publicId: data.publicId,
+        designData: analyzeResult,
+      };
+
+      const response = await fetch(`${API_BASE}/projects`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error("Failed to save");
+
+      alert("Project '" + data.projectName + "' saved successfully!");
+
+      navigate("/ai");
+    } catch (err) {
+      console.error(err);
+      alert("Error saving project");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -86,7 +139,6 @@ export default function AIGenerateResult() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.target.set(0, 0, 0);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambient);
@@ -122,7 +174,7 @@ export default function AIGenerateResult() {
       try {
         color = parseInt(obj.color.replace("#", "0x"), 16);
       } catch {
-        // ignore invalid color
+        /* ignore */
       }
 
       const mat = new THREE.MeshLambertMaterial({
@@ -139,8 +191,10 @@ export default function AIGenerateResult() {
       scene.add(mesh);
 
       const edges = new THREE.EdgesGeometry(geo);
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x222222 });
-      const lines = new THREE.LineSegments(edges, lineMat);
+      const lines = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x222222 })
+      );
       mesh.add(lines);
 
       makeLabel(
@@ -159,11 +213,9 @@ export default function AIGenerateResult() {
     animate();
 
     const onResize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
+      camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setSize(container.clientWidth, container.clientHeight);
     };
     window.addEventListener("resize", onResize);
 
@@ -194,8 +246,7 @@ export default function AIGenerateResult() {
     ctx.fillText(text, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: texture });
-    const sprite = new THREE.Sprite(spriteMat);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
     sprite.position.copy(position);
     sprite.scale.set(1.2, 0.3, 1);
     scene.add(sprite);
@@ -211,35 +262,30 @@ export default function AIGenerateResult() {
 
   return (
     <div className="p-8 space-y-6">
-      <h1 className="text-2xl font-bold">AI Generated Result</h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold">AI Generated Result</h1>
+        <p className="text-sm text-muted-foreground">
+          Project Name:{" "}
+          <span className="font-semibold text-primary">{data.projectName}</span>
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">
             {analyzeResult
-              ? "✅ Analyzed — see 3D view on the right"
-              : "👆 Click the image to analyze and build 3D scene"}
+              ? "Analyzed — see 3D view on the right"
+              : "Click the image to analyze"}
           </p>
-
           <div
-            className="relative overflow-hidden transition-all border-4 shadow-lg cursor-pointer rounded-2xl group hover:border-primary"
+            className="relative overflow-hidden border-4 shadow-lg cursor-pointer rounded-2xl group hover:border-primary"
             onClick={handleImageClick}
           >
             <img
               src={data.imageUrl}
-              alt="AI Generated Interior"
+              alt="AI Generated"
               className="object-cover w-full rounded-xl"
             />
-
-            {!analyzing && !analyzeResult && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 transition-opacity opacity-0 bg-black/50 rounded-xl group-hover:opacity-100">
-                <ScanSearch className="w-10 h-10 text-white" />
-                <span className="text-sm font-semibold text-white">
-                  Analyze & Build 3D
-                </span>
-              </div>
-            )}
-
             {analyzing && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 rounded-xl">
                 <Loader2 className="w-10 h-10 text-white animate-spin" />
@@ -248,17 +294,22 @@ export default function AIGenerateResult() {
                 </span>
               </div>
             )}
+            {!analyzing && !analyzeResult && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 bg-black/50 rounded-xl group-hover:opacity-100 transition-opacity">
+                <ScanSearch className="w-10 h-10 text-white" />
+                <span className="text-sm font-semibold text-white">
+                  Analyze & Build 3D
+                </span>
+              </div>
+            )}
           </div>
-
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Box className="w-4 h-4" />
-            3D Scene Preview
+            <Box className="w-4 h-4" /> 3D Scene Preview
           </p>
-
           <div
             ref={canvasRef}
             className="overflow-hidden border bg-muted rounded-2xl"
@@ -273,22 +324,17 @@ export default function AIGenerateResult() {
               </div>
             )}
           </div>
-
           {analyzeResult && (
             <div className="p-4 space-y-2 text-sm border rounded-xl bg-surface">
-              <p className="font-semibold">
-                Detected {analyzeResult.objects.length} objects
+              <p className="font-semibold text-primary">
+                Room Type: {data.roomType}
               </p>
               <div className="flex flex-wrap gap-2">
                 {analyzeResult.objects.map((obj) => (
                   <span
                     key={obj.id}
-                    className="px-2 py-1 text-xs font-medium rounded-full"
-                    style={{
-                      backgroundColor: obj.color + "33",
-                      border: `1px solid ${obj.color}`,
-                      color: obj.color,
-                    }}
+                    className="px-2 py-1 text-xs font-medium rounded-full border"
+                    style={{ color: obj.color, borderColor: obj.color }}
                   >
                     {obj.name}
                   </span>
@@ -309,12 +355,28 @@ export default function AIGenerateResult() {
           onClick={() => {
             const link = document.createElement("a");
             link.href = data.imageUrl;
-            link.download = "ai-room.png";
+            link.download = `${data.projectName}.png`;
             link.click();
           }}
         >
           Download Image
         </Button>
+
+        {analyzeResult && (
+          <Button
+            variant="secondary"
+            onClick={handleSaveProject}
+            disabled={saving}
+            className="gap-2"
+          >
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {saving ? "Saving..." : "Save Project"}
+          </Button>
+        )}
 
         {analyzeResult && (
           <Button
@@ -325,7 +387,7 @@ export default function AIGenerateResult() {
               const url = URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
-              link.download = "room-objects.json";
+              link.download = `${data.projectName}-3d.json`;
               link.click();
             }}
           >
