@@ -63,7 +63,19 @@ export default function CreateProject() {
       if (!response.ok) throw new Error("Failed to generate preview");
 
       const result = JSON.parse(responseText);
-      navigate("/ai/generate", { state: result });
+      navigate("/ai/generate", {
+        state: {
+          ...result,
+          projectName: data.projectName,
+          roomType: data.roomType,
+          dimensions: {
+            length: data.length,
+            width: data.width,
+            height: data.height,
+          },
+          prompt: data.prompt,
+        },
+      });
     } catch (error) {
       console.error("Error generating design:", error);
     } finally {
