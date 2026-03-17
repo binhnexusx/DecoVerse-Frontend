@@ -2,6 +2,7 @@ import AppRouter from "./routes/AppRouter";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect } from "react";
 import { syncUserWithBackend } from "./services/user";
+import { Toaster } from "sonner";
 
 function App() {
   const { isAuthenticated, user, isLoading, getAccessTokenSilently } =
@@ -38,6 +39,7 @@ function App() {
   return (
     <div className="w-full h-screen bg-gray-900">
       <AppRouter />
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

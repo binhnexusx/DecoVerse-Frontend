@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { API_BASE } from "@/lib/api";
 import { useAuth0 } from "@auth0/auth0-react";
+import { Header } from "@/components/common/Header";
+import { toast } from "sonner";
 
 interface RoomObject {
   id: string;
@@ -101,12 +103,11 @@ export default function AIGenerateResult() {
 
       if (!response.ok) throw new Error("Failed to save");
 
-      alert("Project '" + data.projectName + "' saved successfully!");
+      toast.success(`Project "${data.projectName}" saved successfully!`);
 
       navigate("/ai");
     } catch (err) {
-      console.error(err);
-      alert("Error saving project");
+      toast.error("Failed to save project");
     } finally {
       setSaving(false);
     }
@@ -261,16 +262,12 @@ export default function AIGenerateResult() {
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">AI Generated Result</h1>
-        <p className="text-sm text-muted-foreground">
-          Project Name:{" "}
-          <span className="font-semibold text-primary">{data.projectName}</span>
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div className="space-y-8">
+      <Header
+        title="AI Generated Result"
+        subtitle={`Project Name: ${data.projectName}`}
+      />
+      <div className="grid grid-cols-2 gap-6 px-8 space-y-6">
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">
             {analyzeResult
@@ -345,7 +342,7 @@ export default function AIGenerateResult() {
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 px-8">
         <Button variant="outline" onClick={() => navigate(-1)}>
           Back
         </Button>
@@ -364,7 +361,7 @@ export default function AIGenerateResult() {
 
         {analyzeResult && (
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={handleSaveProject}
             disabled={saving}
             className="gap-2"
@@ -380,6 +377,7 @@ export default function AIGenerateResult() {
 
         {analyzeResult && (
           <Button
+            variant="outline"
             onClick={() => {
               const blob = new Blob([JSON.stringify(analyzeResult, null, 2)], {
                 type: "application/json",
