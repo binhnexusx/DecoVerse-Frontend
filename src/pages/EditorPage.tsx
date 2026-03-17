@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getProjectDetail } from "@/services/home";
 import { API_BASE } from "@/lib/api";
 import axios from "axios";
+import { toast } from "sonner";
 
 export default function EditorPage() {
   const { id } = useParams();
@@ -239,11 +240,11 @@ export default function EditorPage() {
         }
       );
 
-      alert("New version saved successfully!");
+      toast.success("New version saved successfully!");
       navigate(`/projects/${id}`);
     } catch (error) {
       console.error("Save error:", error);
-      alert("Failed to save new version.");
+      toast.error("Failed to save new version.");
     } finally {
       setSaving(false);
     }
