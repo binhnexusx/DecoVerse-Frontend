@@ -65,8 +65,9 @@ export default function ProjectDetailPage() {
           <ShareProjectDialog
             open={open}
             onOpenChange={setOpen}
+            projectId={project.id}
             projectName={project.name}
-            imageUrl={project.imageUrl}
+            imageUrl={project.previewUrl}
           />
         </div>
         <div className="bg-white rounded-2xl border shadow-sm p-6">
