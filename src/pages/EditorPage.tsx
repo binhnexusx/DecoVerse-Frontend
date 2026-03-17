@@ -3,10 +3,12 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { ArrowLeft, Save, Loader2, Info } from "lucide-react";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { ArrowLeft, Save, Loader2, Info, MousePointer2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getProjectDetail } from "@/services/home";
 import { API_BASE } from "@/lib/api";
+import axios from "axios";
 
 export default function EditorPage() {
   const { id } = useParams();
@@ -17,48 +19,86 @@ export default function EditorPage() {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [selectedObjectName, setSelectedObjectName] = useState<string | null>(
+    null
+  );
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const objectsRef = useRef<THREE.Mesh[]>([]);
+  const transformControlsRef = useRef<TransformControls | null>(null);
+
+  const [currentVersion, setCurrentVersion] = useState<any>(null);
 
   useEffect(() => {
     const loadProject = async () => {
       try {
-        const token = await getAccessTokenSilently({
-          authorizationParams: { audience: "https://api.decoverse.com" },
-        });
+        const token = await getAccessTokenSilently();
         const data = await getProjectDetail(id!, token);
         setProject(data);
 
         const queryParams = new URLSearchParams(location.search);
-        const versionIdFromUrl = queryParams.get("v");
+        const vId = queryParams.get("v");
 
-        let designDataToLoad;
+        const versionData = vId
+          ? data.versions.find((v: any) => v.id === vId)
+          : data.versions[0];
 
-        if (versionIdFromUrl) {
-          const targetVersion = data.versions.find(
-            (v: any) => v.id === versionIdFromUrl
-          );
-          designDataToLoad = targetVersion?.designData;
-        } else {
-          designDataToLoad = data.versions?.[0]?.designData;
-        }
-
-        if (designDataToLoad) {
-          initThreeJS(designDataToLoad);
+        if (versionData) {
+          setCurrentVersion(versionData);
+          if (versionData.designData) {
+            initThreeJS(versionData.designData);
+          }
         }
       } catch (error) {
-        console.error("Load error:", error);
+        console.error("Load project error:", error);
       } finally {
         setLoading(false);
       }
     };
     loadProject();
+
+    return () => {
+      if (transformControlsRef.current) transformControlsRef.current.dispose();
+    };
   }, [id, location.search]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if (!transformControlsRef.current) return;
+
+      switch (e.key.toLowerCase()) {
+        case "g":
+          transformControlsRef.current.setMode("translate");
+          break;
+        case "r":
+          transformControlsRef.current.setMode("rotate");
+          break;
+        case "s":
+          transformControlsRef.current.setMode("scale");
+          break;
+        case "escape":
+          transformControlsRef.current.detach();
+          setSelectedObjectName(null);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   const initThreeJS = (designData: any) => {
-    if (!canvasRef.current || !designData) return;
+    if (!canvasRef.current) return;
 
     if (sceneRef.current) {
       objectsRef.current = [];
@@ -83,10 +123,37 @@ export default function EditorPage() {
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
+    const orbit = new OrbitControls(camera, renderer.domElement);
+    orbit.enableDamping = true;
 
+    const transform = new TransformControls(camera, renderer.domElement);
+    scene.add(transform as unknown as THREE.Object3D);
+    transformControlsRef.current = transform;
+
+    transform.addEventListener("dragging-changed", (e) => {
+      orbit.enabled = !e.value;
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const onMouseDown = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(objectsRef.current);
+
+      if (intersects.length > 0) {
+        const object = intersects[0].object as THREE.Mesh;
+        transform.attach(object);
+        setSelectedObjectName(object.name);
+      }
+    };
+    renderer.domElement.addEventListener("mousedown", onMouseDown);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const sunLight = new THREE.DirectionalLight(0xffffff, 1);
     sunLight.position.set(5, 10, 5);
     sunLight.castShadow = true;
@@ -123,50 +190,60 @@ export default function EditorPage() {
 
     const animate = () => {
       requestAnimationFrame(animate);
-      controls.update();
+      orbit.update();
       renderer.render(scene, camera);
     };
     animate();
   };
 
   const handleSaveVersion = async () => {
+    if (!currentVersion) return;
     setSaving(true);
+
     try {
-      const token = await getAccessTokenSilently({
-        authorizationParams: { audience: "https://api.decoverse.com" },
+      const token = await getAccessTokenSilently();
+
+      const updatedObjects = objectsRef.current.map((mesh) => {
+        const originalObj = currentVersion.designData.objects.find(
+          (o: any) => o.name === mesh.name
+        );
+
+        return {
+          ...originalObj,
+          position: {
+            x: mesh.position.x,
+            y: mesh.position.y,
+            z: mesh.position.z,
+          },
+          rotation: { y: mesh.rotation.y },
+          size: {
+            width: (mesh.geometry as THREE.BoxGeometry).parameters.width,
+            height: (mesh.geometry as THREE.BoxGeometry).parameters.height,
+            depth: (mesh.geometry as THREE.BoxGeometry).parameters.depth,
+          },
+        };
       });
 
-      const updatedObjects = objectsRef.current.map((mesh) => ({
-        name: mesh.name,
-        position: {
-          x: mesh.position.x,
-          y: mesh.position.y,
-          z: mesh.position.z,
-        },
-        rotation: { y: mesh.rotation.y },
-        size: (mesh.geometry as THREE.BoxGeometry).parameters,
-      }));
-
       const newDesignData = {
-        ...project.versions[0].designData,
+        roomSize: currentVersion.designData.roomSize,
         objects: updatedObjects,
       };
 
-      const res = await fetch(`${API_BASE}/projects/${id}/version`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+      await axios.post(
+        `${API_BASE}/projects/${id}/version`,
+        {
+          designData: newDesignData,
         },
-        body: JSON.stringify({ designData: newDesignData }),
-      });
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      if (res.ok) {
-        alert("New version saved!");
-        navigate(`/projects/${id}`);
-      }
+      alert("New version saved successfully!");
+      navigate(`/projects/${id}`);
     } catch (error) {
       console.error("Save error:", error);
+      alert("Failed to save new version.");
     } finally {
       setSaving(false);
     }
@@ -175,52 +252,58 @@ export default function EditorPage() {
   if (loading)
     return (
       <div className="h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin" />
+        <Loader2 className="animate-spin text-cyan-500" size={40} />
       </div>
     );
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
-      <div className="h-16 border-b bg-white flex items-center justify-between px-6 shrink-0">
+      <div className="h-16 border-b bg-white flex items-center justify-between px-6 shrink-0 shadow-sm">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </Button>
-          <h1 className="font-semibold text-lg">{project?.name}</h1>
+          <div className="h-6 w-px bg-slate-200" />
+          <h1 className="font-bold text-slate-800">{project?.name}</h1>
         </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={handleSaveVersion}
-            disabled={saving}
-            className="bg-cyan-600 hover:bg-cyan-700"
-          >
-            {saving ? (
-              <Loader2 className="animate-spin mr-2 w-4 h-4" />
-            ) : (
-              <Save className="mr-2 w-4 h-4" />
-            )}
-            Save Version
-          </Button>
-        </div>
+        <Button
+          onClick={handleSaveVersion}
+          disabled={saving}
+          className="bg-cyan-600 hover:bg-cyan-700"
+        >
+          {saving ? (
+            <Loader2 className="animate-spin mr-2 h-4 w-4" />
+          ) : (
+            <Save className="mr-2 h-4 w-4" />
+          )}
+          Save Version
+        </Button>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div ref={canvasRef} className="flex-1 relative cursor-move" />
-
-        <div className="w-80 border-l bg-white p-6 space-y-6 overflow-y-auto">
+        <div ref={canvasRef} className="flex-1 relative bg-slate-100" />
+        <div className="w-80 border-l bg-white p-6 space-y-8 overflow-y-auto">
           <div>
-            <h3 className="font-semibold flex items-center gap-2 mb-4">
-              <Info className="w-4 h-4 text-cyan-500" /> Current Layout
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <Info className="w-4 h-4 text-cyan-500" /> Editor Info
             </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Object Count</span>
-                <span className="font-medium text-cyan-600">
-                  {objectsRef.current.length} items
-                </span>
-              </div>
+            <div className="space-y-2 text-sm">
+              <p className="text-slate-500">Selected Object:</p>
+              <p className="font-bold text-cyan-600 bg-cyan-50 px-2 py-1 rounded border border-cyan-100">
+                {selectedObjectName || "None"}
+              </p>
             </div>
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <MousePointer2 className="w-4 h-4 text-cyan-500" /> Controls
+            </h3>
+            <ul className="text-xs text-slate-500 space-y-2">
+              <li>• Click object to select</li>
+              <li>• Drag arrows to move</li>
+              <li>• Left click + drag background to rotate</li>
+              <li>• Scroll to zoom</li>
+            </ul>
           </div>
         </div>
       </div>

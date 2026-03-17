@@ -1,65 +1,107 @@
-import type { Version } from "../types/version";
+import { Clock, History, CheckCircle2 } from "lucide-react";
+import RoomViewer3D from "./three/RoomViewer3D";
 
-const versions: Version[] = [
-  {
-    id: 1,
-    version: "1.0",
-    title: "Initial Design",
-    time: "2 hours ago",
-    current: true,
-  },
-  {
-    id: 2,
-    version: "1.1",
-    title: "Color Adjustments",
-    time: "1 day ago",
-  },
-  {
-    id: 3,
-    version: "0.9",
-    title: "Draft",
-    time: "3 days ago",
-  },
-];
+interface ProjectVersion {
+  id: string;
+  version: number;
+  designData: any;
+  previewUrl?: string;
+  createdAt: string;
+}
 
-export default function VersionHistory() {
+interface VersionHistoryProps {
+  versions?: ProjectVersion[];
+  onSelectVersion: (version: ProjectVersion) => void;
+  selectedId?: string;
+  projectPreviewUrl?: string;
+}
+
+export default function VersionHistory({
+  versions = [],
+  onSelectVersion,
+  selectedId,
+  projectPreviewUrl,
+}: VersionHistoryProps) {
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   return (
-    <div className="bg-white rounded-xl border p-6 mt-6">
-      <h3 className="font-semibold text-lg mb-4">Design Version History</h3>
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mt-6">
+      <div className="flex items-center gap-2 mb-6 border-b pb-4 text-slate-800">
+        <History className="text-cyan-500" size={20} />
+        <h3 className="font-bold text-lg">View version history</h3>
+      </div>
 
-      <div className="space-y-4">
-        {versions.map((v) => (
-          <div
-            key={v.id}
-            className={`flex items-center justify-between border rounded-xl p-4 ${
-              !v.current ? "hover:border-cyan-400" : ""
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <img
-                src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
-                className="w-16 h-16 rounded-lg object-cover"
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-medium">
-                    Version {v.version} - {v.title}
-                  </p>
+      <div className="grid grid-cols-1 gap-3">
+        {versions.map((v, index) => {
+          const isActive = selectedId === v.id;
 
-                  {v.current && (
-                    <span className="bg-cyan-500 text-white text-xs px-2 py-1 rounded">
-                      Current
-                    </span>
-                  )}
+          return (
+            <div
+              key={v.id}
+              onClick={() => onSelectVersion(v)}
+              className={`group flex items-center justify-between border-2 rounded-2xl p-4 transition-all cursor-pointer ${
+                isActive
+                  ? "border-cyan-500 bg-cyan-50/50 shadow-md"
+                  : "border-slate-50 hover:border-slate-200 bg-slate-50/30"
+              }`}
+            >
+              <div className="flex items-center gap-5">
+                <div className="relative">
+                  <div
+                    className={`w-16 h-16 rounded-xl overflow-hidden border-2 bg-white shrink-0 pointer-events-none ${
+                      isActive ? "border-cyan-400" : "border-white"
+                    }`}
+                  >
+                    {v.designData ? (
+                      <RoomViewer3D designData={v.designData} />
+                    ) : (
+                      <img
+                        src={
+                          v.previewUrl ||
+                          projectPreviewUrl ||
+                          "https://via.placeholder.com/150"
+                        }
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+
+                  <div className="absolute -top-2 -left-2 bg-slate-900 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-lg z-10">
+                    V{v.version}
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500">{v.time}</p>
+
+                <div>
+                  <p
+                    className={`font-bold text-sm ${isActive ? "text-cyan-700" : "text-slate-700"}`}
+                  >
+                    {index === 0
+                      ? "Latest design version"
+                      : `Edited version v${v.version}`}
+                  </p>
+                  <p className="flex items-center gap-1 text-[10px] text-slate-400 font-medium mt-1">
+                    <Clock size={12} /> {formatTime(v.createdAt)}
+                  </p>
+                </div>
               </div>
+
+              {isActive && (
+                <CheckCircle2
+                  size={20}
+                  className="text-cyan-500 animate-in zoom-in duration-300"
+                />
+              )}
             </div>
-            <button className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-100">
-              Restore
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
