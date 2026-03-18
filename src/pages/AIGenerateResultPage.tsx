@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Loader2,
@@ -69,7 +69,6 @@ export default function AIGenerateResult() {
   useEffect(() => {
     if (!data && !analyzeResult) {
       const savedResult = sessionStorage.getItem("analyzeResult");
-      const savedData = sessionStorage.getItem("locationData");
 
       if (savedResult) {
         try {
