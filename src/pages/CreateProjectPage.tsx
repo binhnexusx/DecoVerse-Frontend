@@ -12,12 +12,14 @@ import { Header } from "@/components/common/Header";
 import { ROOM_TYPES } from "@/types/room";
 import { createProjectSchema } from "@/schema/project.schema";
 import { API_BASE } from "@/lib/api";
+import { useAuth0 } from "@auth0/auth0-react";
 
 type CreateProjectFormValues = z.infer<typeof createProjectSchema>;
 
 export default function CreateProject() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { getAccessTokenSilently } = useAuth0();
 
   const {
     register,
@@ -37,8 +39,8 @@ export default function CreateProject() {
   const onSubmit = async (data: CreateProjectFormValues) => {
     try {
       setLoading(true);
-      console.log("API_BASE:", API_BASE);
-      console.log("FORM DATA:", data);
+
+      const token = await getAccessTokenSilently();
 
       if (!data.prompt || data.prompt.trim() === "") {
         navigate("/manual-design", { state: data });
@@ -47,7 +49,10 @@ export default function CreateProject() {
 
       const response = await fetch(`${API_BASE}/ai/generate-preview`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(data),
       });
 
@@ -58,7 +63,19 @@ export default function CreateProject() {
       if (!response.ok) throw new Error("Failed to generate preview");
 
       const result = JSON.parse(responseText);
-      navigate("/ai/generate", { state: result });
+      navigate("/ai/generate", {
+        state: {
+          ...result,
+          projectName: data.projectName,
+          roomType: data.roomType,
+          dimensions: {
+            length: data.length,
+            width: data.width,
+            height: data.height,
+          },
+          prompt: data.prompt,
+        },
+      });
     } catch (error) {
       console.error("Error generating design:", error);
     } finally {
