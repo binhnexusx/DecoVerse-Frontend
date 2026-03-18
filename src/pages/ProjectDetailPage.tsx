@@ -8,6 +8,8 @@ import { getProjectDetail } from "@/services/home";
 import { Button } from "@/components/ui/button";
 import ShareProjectDialog from "@/components/ShareProject";
 import { Room3DViewer } from "@/components/three/Room3DViewer";
+import CommentPanel from "@/components/CommentPanel";
+import CommentButton from "@/components/CommentButton";
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -20,6 +22,9 @@ export default function ProjectDetailPage() {
   const [open, setOpen] = useState(false);
   const [hoveredObject, setHoveredObject] = useState<string | null>(null);
 
+  const [commentOpen, setCommentOpen] = useState(false);
+  const role = "Client";
+  const canComment = role === "Client" || role === "Owner";
   useEffect(() => {
     const fetchDetail = async () => {
       try {
@@ -138,6 +143,10 @@ export default function ProjectDetailPage() {
           selectedId={selectedVersion?.id}
         />
       </div>
+      {canComment && (
+        <CommentButton onClick={() => setCommentOpen((prev) => !prev)} />
+      )}
+      <CommentPanel open={commentOpen} onClose={() => setCommentOpen(false)} />
     </div>
   );
 }
