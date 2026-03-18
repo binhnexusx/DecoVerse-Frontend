@@ -6,8 +6,8 @@ import VersionHistory from "@/components/VersionHistory";
 import { Header } from "@/components/common/Header";
 import { getProjectDetail } from "@/services/home";
 import { Button } from "@/components/ui/button";
-import RoomViewer3D from "@/components/three/RoomViewer3D";
 import ShareProjectDialog from "@/components/ShareProject";
+import { Room3DViewer } from "@/components/three/Room3DViewer";
 import CommentPanel from "@/components/CommentPanel";
 import CommentButton from "@/components/CommentButton";
 
@@ -20,6 +20,8 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [selectedVersion, setSelectedVersion] = useState<any>(null);
   const [open, setOpen] = useState(false);
+  const [hoveredObject, setHoveredObject] = useState<string | null>(null);
+
   const [commentOpen, setCommentOpen] = useState(false);
   const role = "Client";
   const canComment = role === "Client" || role === "Owner";
@@ -42,7 +44,7 @@ export default function ProjectDetailPage() {
 
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-primary-500" size={40} />
       </div>
     );
@@ -50,9 +52,9 @@ export default function ProjectDetailPage() {
     return <div className="p-8 text-center">Project not found.</div>;
 
   return (
-    <div className="space-y-6 pb-20 bg-slate-50/50 min-h-screen">
+    <div className="min-h-screen pb-20 space-y-6 bg-slate-50/50">
       <Header title={project.name} subtitle="Manage Design History" />
-      <div className="px-8 space-y-6 max-w-7xl mx-auto">
+      <div className="px-8 mx-auto space-y-6 max-w-7xl">
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={() => navigate("/projects")}
@@ -63,7 +65,7 @@ export default function ProjectDetailPage() {
           </button>
 
           <Button onClick={() => setOpen(true)} className="rounded-full">
-            <Share className="mr-2 h-4 w-4" />
+            <Share className="w-4 h-4 mr-2" />
             Share Project
           </Button>
           <ShareProjectDialog
@@ -74,49 +76,51 @@ export default function ProjectDetailPage() {
             imageUrl={project.previewUrl}
           />
         </div>
-        <div className="bg-white rounded-2xl border shadow-sm p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold flex items-center gap-2 text-slate-800">
+        <div className="p-6 bg-white border shadow-sm rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="flex items-center gap-2 font-bold text-slate-800">
               <Boxes size={18} className="text-primary-500" />
               Compare Designs & 3D Models
             </h3>
-            <span className="bg-cyan-100 text-primary-500 text-xs font-bold px-3 py-1 rounded-full">
+            <span className="px-3 py-1 text-xs font-bold rounded-full bg-cyan-100 text-primary-500">
               Version v{selectedVersion?.version}
             </span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[500px]">
-            <div className="rounded-xl overflow-hidden bg-slate-900 border shadow-inner relative group">
+            <div className="relative overflow-hidden border shadow-inner rounded-xl bg-slate-900 group">
               <div className="absolute top-3 left-3 z-10 bg-black/50 text-white text-[10px] px-2 py-1 rounded uppercase font-bold backdrop-blur-sm">
                 AI Reference Image
               </div>
               <img
                 src={project.previewUrl}
-                className="w-full h-full object-contain"
+                className="object-contain w-full h-full"
                 alt="AI Original Preview"
               />
             </div>
 
-            <div className="rounded-xl overflow-hidden bg-slate-100 border shadow-inner relative">
+            <div className="relative overflow-hidden border shadow-inner rounded-xl bg-slate-100">
               <div className="absolute top-3 left-3 z-10 bg-primary-500 text-white text-[10px] px-2 py-1 rounded uppercase font-bold backdrop-blur-sm">
                 Interactive 3D View
               </div>
-              {selectedVersion?.designData ? (
-                <RoomViewer3D designData={selectedVersion.designData} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                  Loading 3D data...
-                </div>
+              {selectedVersion?.designData && (
+                <Room3DViewer
+                  roomSize={selectedVersion.designData.roomSize}
+                  objects={selectedVersion.designData.objects}
+                  height="100%"
+                  hoveredObjectId={hoveredObject}
+                  onObjectHover={setHoveredObject}
+                />
               )}
             </div>
           </div>
 
-          <div className="mt-6 flex justify-between items-center">
+          <div className="flex items-center justify-between mt-6">
             <div className="space-y-1">
-              <p className="text-sm text-slate-500 font-medium">
+              <p className="text-sm font-medium text-slate-500">
                 Project: <span className="text-slate-800">{project.name}</span>
               </p>
-              <p className="text-xs text-slate-400 italic">
+              <p className="text-xs italic text-slate-400">
                 Last updated:{" "}
                 {new Date(selectedVersion?.createdAt).toLocaleString()}
               </p>
@@ -126,7 +130,7 @@ export default function ProjectDetailPage() {
               onClick={() =>
                 navigate(`/editor/${project.id}?v=${selectedVersion.id}`)
               }
-              className="bg-primary-500 hover:bg-primary-600 font-bold px-8"
+              className="px-8 font-bold bg-primary-500 hover:bg-primary-600"
             >
               Open Editor
             </Button>
@@ -139,13 +143,9 @@ export default function ProjectDetailPage() {
           selectedId={selectedVersion?.id}
         />
       </div>
-      {/* COMMENT BUTTON */}
       {canComment && (
         <CommentButton onClick={() => setCommentOpen((prev) => !prev)} />
       )}
-      {/* <CommentButton onClick={() => setCommentOpen(prev => !prev)} /> */}
-
-      {/* COMMENT PANEL */}
       <CommentPanel open={commentOpen} onClose={() => setCommentOpen(false)} />
     </div>
   );

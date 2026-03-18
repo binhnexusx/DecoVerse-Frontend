@@ -1,18 +1,24 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, ScanSearch, Box, Save } from "lucide-react";
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import {
+  Loader2,
+  ScanSearch,
+  Box,
+  Download,
+  ArrowLeft,
+  Save,
+} from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { useAuth0 } from "@auth0/auth0-react";
-import { Header } from "@/components/common/Header";
 import { toast } from "sonner";
+import { Room3DViewer } from "@/components/three/Room3DViewer";
 
 interface RoomObject {
   id: string;
   name: string;
   type: "furniture" | "decoration" | "lighting" | "appliance";
+  category?: string;
   color: string;
   position: { x: number; y: number; z: number };
   size: { width: number; height: number; depth: number };
@@ -50,14 +56,43 @@ export default function AIGenerateResult() {
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const [hoveredObject, setHoveredObject] = useState<string | null>(null);
 
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  useEffect(() => {
+    if (data?.imageUrl) {
+      sessionStorage.removeItem("analyzeResult");
+      sessionStorage.removeItem("locationData");
+      setAnalyzeResult(null);
+    }
+  }, [data?.imageUrl]);
+
+  useEffect(() => {
+    if (!data && !analyzeResult) {
+      const savedResult = sessionStorage.getItem("analyzeResult");
+
+      if (savedResult) {
+        try {
+          const parsed = JSON.parse(savedResult);
+          setAnalyzeResult(parsed);
+        } catch (err) {
+          console.error("Failed to parse saved result:", err);
+        }
+      }
+    }
+  }, [data, analyzeResult]);
+
+  useEffect(() => {
+    if (analyzeResult && data) {
+      sessionStorage.setItem("analyzeResult", JSON.stringify(analyzeResult));
+      sessionStorage.setItem("locationData", JSON.stringify(data));
+    }
+  }, [analyzeResult, data]);
 
   const handleImageClick = async () => {
     if (!data?.imageUrl || analyzing) return;
     setAnalyzing(true);
     setError(null);
+    setAnalyzeResult(null);
 
     try {
       const response = await fetch(`${API_BASE}/ai/analyze`, {
@@ -67,7 +102,9 @@ export default function AIGenerateResult() {
       });
 
       if (!response.ok) throw new Error("Analysis failed");
+
       const result: AnalyzeResult = await response.json();
+      console.log("Analyze result:", result);
       setAnalyzeResult(result);
     } catch (err) {
       console.error(err);
@@ -113,147 +150,7 @@ export default function AIGenerateResult() {
     }
   };
 
-  useEffect(() => {
-    if (!analyzeResult || !canvasRef.current) return;
-
-    if (rendererRef.current) {
-      rendererRef.current.dispose();
-      canvasRef.current.innerHTML = "";
-    }
-
-    const container = canvasRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf0f0f0);
-
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100);
-    camera.position.set(0, 5, 10);
-    camera.lookAt(0, 0, 0);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
-    container.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambient);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(5, 10, 5);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
-
-    const { width: rW, depth: rD } = analyzeResult.roomSize;
-    const floorGeo = new THREE.PlaneGeometry(rW, rD);
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0xd4c4a8 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
-
-    const roomH = analyzeResult.roomSize.height;
-    const roomBoxGeo = new THREE.BoxGeometry(rW, roomH, rD);
-    const roomEdges = new THREE.EdgesGeometry(roomBoxGeo);
-    const roomLine = new THREE.LineSegments(
-      roomEdges,
-      new THREE.LineBasicMaterial({ color: 0xaaaaaa })
-    );
-    roomLine.position.y = roomH / 2;
-    scene.add(roomLine);
-
-    analyzeResult.objects.forEach((obj) => {
-      const { width: w, height: h, depth: d } = obj.size;
-      const geo = new THREE.BoxGeometry(w, h, d);
-
-      let color = 0x888888;
-      try {
-        color = parseInt(obj.color.replace("#", "0x"), 16);
-      } catch {
-        /* ignore */
-      }
-
-      const mat = new THREE.MeshLambertMaterial({
-        color,
-        transparent: true,
-        opacity: 0.85,
-      });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(obj.position.x, obj.position.y, obj.position.z);
-      mesh.rotation.y = obj.rotation.y;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-
-      const edges = new THREE.EdgesGeometry(geo);
-      const lines = new THREE.LineSegments(
-        edges,
-        new THREE.LineBasicMaterial({ color: 0x222222 })
-      );
-      mesh.add(lines);
-
-      makeLabel(
-        obj.name,
-        mesh.position.clone().setY(obj.position.y + h / 2 + 0.2),
-        scene
-      );
-    });
-
-    let frameId: number;
-    const animate = () => {
-      frameId = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    const onResize = () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    };
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", onResize);
-      controls.dispose();
-      renderer.dispose();
-    };
-  }, [analyzeResult]);
-
-  function makeLabel(
-    text: string,
-    position: THREE.Vector3,
-    scene: THREE.Scene
-  ) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.roundRect(4, 4, 248, 56, 8);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 22px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 128, 32);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
-    sprite.position.copy(position);
-    sprite.scale.set(1.2, 0.3, 1);
-    scene.add(sprite);
-  }
-
-  if (!data?.imageUrl) {
+  if (!data?.imageUrl && !analyzeResult) {
     return (
       <div className="flex items-center justify-center h-screen">
         <p className="text-lg text-muted-foreground">No AI result found.</p>
@@ -262,27 +159,51 @@ export default function AIGenerateResult() {
   }
 
   return (
-    <div className="space-y-8">
-      <Header
-        title="AI Generated Result"
-        subtitle={`Project Name: ${data.projectName}`}
-      />
-      <div className="grid grid-cols-2 gap-6 px-8 space-y-6">
+    <div className="p-8 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">AI Room Analysis</h1>
+          {data?.projectName && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Project:{" "}
+              <span className="font-semibold text-primary">
+                {data.projectName}
+              </span>
+            </p>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">
             {analyzeResult
-              ? "Analyzed — see 3D view on the right"
-              : "Click the image to analyze"}
+              ? "✅ Analyzed — see 3D view on the right"
+              : "👆 Click the image to analyze"}
           </p>
+
           <div
-            className="relative overflow-hidden border-4 shadow-lg cursor-pointer rounded-2xl group hover:border-primary"
+            className="relative overflow-hidden transition-colors border-2 cursor-pointer rounded-2xl group hover:border-primary"
             onClick={handleImageClick}
           >
             <img
-              src={data.imageUrl}
-              alt="AI Generated"
+              src={data?.imageUrl || ""}
+              alt="AI Generated Interior"
               className="object-cover w-full rounded-xl"
             />
+
+            {!analyzing && !analyzeResult && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 transition-opacity opacity-0 bg-black/50 rounded-xl group-hover:opacity-100">
+                <ScanSearch className="w-10 h-10 text-white" />
+                <span className="text-sm font-semibold text-white">
+                  Analyze & Build 3D
+                </span>
+              </div>
+            )}
+
             {analyzing && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 rounded-xl">
                 <Loader2 className="w-10 h-10 text-white animate-spin" />
@@ -291,51 +212,90 @@ export default function AIGenerateResult() {
                 </span>
               </div>
             )}
-            {!analyzing && !analyzeResult && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 bg-black/50 rounded-xl group-hover:opacity-100 transition-opacity">
-                <ScanSearch className="w-10 h-10 text-white" />
-                <span className="text-sm font-semibold text-white">
-                  Analyze & Build 3D
-                </span>
-              </div>
-            )}
           </div>
+
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
         <div className="space-y-3">
           <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Box className="w-4 h-4" /> 3D Scene Preview
+            <Box className="w-4 h-4" />
+            3D Scene Preview
           </p>
-          <div
-            ref={canvasRef}
-            className="overflow-hidden border bg-muted rounded-2xl"
-            style={{ height: "450px" }}
-          >
-            {!analyzeResult && !analyzing && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-                <Box className="w-16 h-16 opacity-20" />
-                <p className="text-sm">
-                  3D scene will appear here after analysis
-                </p>
-              </div>
-            )}
-          </div>
+
+          {analyzeResult ? (
+            <div style={{ height: "550px" }}>
+              {" "}
+              {/* Container cố định height */}
+              <Room3DViewer
+                roomSize={analyzeResult.roomSize}
+                objects={analyzeResult.objects}
+                height="100%" // Chiếm hết container
+                className="border rounded-2xl"
+                hoveredObjectId={hoveredObject}
+                onObjectHover={setHoveredObject}
+              />
+            </div>
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center gap-3 border rounded-2xl bg-[#f0f0f0] text-muted-foreground"
+              style={{ height: "550px" }}
+            >
+              <Box className="w-16 h-16 opacity-20" />
+              <p className="text-sm">3D preview will appear here</p>
+              <p className="text-xs opacity-60">Click the image to analyze</p>
+            </div>
+          )}
+
           {analyzeResult && (
-            <div className="p-4 space-y-2 text-sm border rounded-xl bg-surface">
-              <p className="font-semibold text-primary">
-                Room Type: {data.roomType}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {analyzeResult.objects.map((obj) => (
-                  <span
-                    key={obj.id}
-                    className="px-2 py-1 text-xs font-medium rounded-full border"
-                    style={{ color: obj.color, borderColor: obj.color }}
-                  >
-                    {obj.name}
-                  </span>
-                ))}
+            <div className="p-4 space-y-3 bg-white border shadow-sm rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-gray-800">
+                    Room: {data?.roomType || "Unknown"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {analyzeResult.roomSize.width}m ×{" "}
+                    {analyzeResult.roomSize.depth}m ×{" "}
+                    {analyzeResult.roomSize.height}m
+                  </p>
+                </div>
+                <span className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
+                  {analyzeResult.objects.length} items
+                </span>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-600">
+                  Objects:
+                </p>
+                <div className="flex flex-wrap gap-2 p-2 overflow-y-auto bg-gray-100 rounded-lg max-h-24">
+                  {analyzeResult.objects.map((obj) => {
+                    const bgColor = obj.color + "30";
+
+                    return (
+                      <span
+                        key={obj.id}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full border cursor-pointer transition-all
+                          ${
+                            hoveredObject === obj.id
+                              ? "ring-2 ring-blue-500 scale-105 shadow-md bg-white"
+                              : "hover:scale-105 hover:shadow-sm"
+                          }`}
+                        style={{
+                          backgroundColor: bgColor,
+                          borderColor: obj.color,
+                          color: "#1F2937",
+                          fontWeight: 500,
+                        }}
+                        onMouseEnter={() => setHoveredObject(obj.id)}
+                        onMouseLeave={() => setHoveredObject(null)}
+                      >
+                        {obj.name}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -350,47 +310,51 @@ export default function AIGenerateResult() {
         <Button
           variant="outline"
           onClick={() => {
+            if (!data?.imageUrl) return;
             const link = document.createElement("a");
             link.href = data.imageUrl;
-            link.download = `${data.projectName}.png`;
+            link.download = `${data?.projectName || "ai-room"}.png`;
             link.click();
           }}
         >
-          Download Image
+          <Download className="w-4 h-4 mr-2" /> Image
         </Button>
 
-        {analyzeResult && (
-          <Button
-            variant="outline"
-            onClick={handleSaveProject}
-            disabled={saving}
-            className="gap-2"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            {saving ? "Saving..." : "Save Project"}
-          </Button>
-        )}
+        {analyzeResult && data && (
+          <>
+            <Button
+              variant="secondary"
+              onClick={handleSaveProject}
+              disabled={saving}
+              className="gap-2"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? "Saving..." : "Save Project"}
+            </Button>
 
-        {analyzeResult && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(analyzeResult, null, 2)], {
-                type: "application/json",
-              });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = `${data.projectName}-3d.json`;
-              link.click();
-            }}
-          >
-            Download JSON
-          </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const blob = new Blob(
+                  [JSON.stringify(analyzeResult, null, 2)],
+                  {
+                    type: "application/json",
+                  }
+                );
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${data?.projectName || "room"}-objects.json`;
+                link.click();
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" /> JSON
+            </Button>
+          </>
         )}
       </div>
     </div>
