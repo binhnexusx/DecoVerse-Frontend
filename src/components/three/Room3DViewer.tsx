@@ -59,7 +59,6 @@ export function Room3DViewer({
   showRoomOutline = true,
   backgroundColor = "#f0f0f0",
   hoverColor = "#3b82f6",
-  selectedColor = "#06b6d4",
   selectedObjectId,
   hoveredObjectId,
   transformMode = "translate",
