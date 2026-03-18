@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -44,7 +45,6 @@ const STYLES = [
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
-// ── Empty form state ───────────────────────────────────────────────────────────
 const emptyForm = {
   name: "",
   category: "",
@@ -53,6 +53,8 @@ const emptyForm = {
   tags: "",
   thumbnailUrl: "",
 };
+
+const PAGE_SIZE_OPTIONS = [8, 12, 24, 48];
 
 // ── Stat Card ──────────────────────────────────────────────────────────────────
 function StatCard({
@@ -179,7 +181,6 @@ function UploadModal({
           </button>
         </div>
 
-        {/* File drop zone */}
         <div
           onClick={() => fileRef.current?.click()}
           className={`flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-8 cursor-pointer transition-colors
@@ -203,7 +204,6 @@ function UploadModal({
           )}
         </div>
 
-        {/* Form fields */}
         <div className="grid grid-cols-2 gap-3">
           {[
             { key: "name", label: "Name *", placeholder: "Modern Gray Sofa" },
@@ -302,11 +302,14 @@ function ItemCard({
   item: FurnitureItem;
   onDelete: (id: string) => void;
 }) {
+  const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="relative p-5 transition-all border group rounded-2xl border-border bg-surface hover:border-primary/30 hover:shadow-card">
-      {/* Thumbnail or placeholder */}
+    <div
+      onClick={() => navigate(`/admin/models/${item.id}`)}
+      className="relative p-5 transition-all border cursor-pointer group rounded-2xl border-border bg-surface hover:border-primary/30 hover:shadow-card"
+    >
       <div className="flex items-center justify-center w-full mb-4 overflow-hidden aspect-video rounded-xl bg-background">
         {item.thumbnailUrl ? (
           <img
@@ -317,6 +320,12 @@ function ItemCard({
         ) : (
           <span className="text-4xl opacity-20">📦</span>
         )}
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center transition-opacity opacity-0 pointer-events-none rounded-2xl bg-primary/5 group-hover:opacity-100">
+        <span className="px-3 py-1 text-xs font-medium border rounded-full bg-primary/10 border-primary/20 text-primary">
+          View 3D →
+        </span>
       </div>
 
       <div className="space-y-2">
@@ -360,6 +369,7 @@ function ItemCard({
             href={item.cloudinaryUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="text-xs text-primary hover:underline"
           >
             View model ↗
@@ -367,13 +377,19 @@ function ItemCard({
 
           {!confirmDelete ? (
             <button
-              onClick={() => setConfirmDelete(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDelete(true);
+              }}
               className="text-xs transition-colors text-muted-foreground hover:text-red-400"
             >
               Delete
             </button>
           ) : (
-            <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-2"
+              onClick={(e) => e.stopPropagation()}
+            >
               <span className="text-xs text-muted-foreground">Sure?</span>
               <button
                 onClick={() => onDelete(item.id)}
@@ -395,6 +411,138 @@ function ItemCard({
   );
 }
 
+// ── Pagination ─────────────────────────────────────────────────────────────────
+function Pagination({
+  currentPage,
+  totalPages,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+}) {
+  const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const to = Math.min(currentPage * pageSize, totalItems);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7)
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages: (number | "...")[] = [];
+    if (currentPage <= 4) {
+      pages.push(1, 2, 3, 4, 5, "...", totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      pages.push(
+        1,
+        "...",
+        totalPages - 4,
+        totalPages - 3,
+        totalPages - 2,
+        totalPages - 1,
+        totalPages
+      );
+    } else {
+      pages.push(
+        1,
+        "...",
+        currentPage - 1,
+        currentPage,
+        currentPage + 1,
+        "...",
+        totalPages
+      );
+    }
+    return pages;
+  };
+
+  const btnBase =
+    "flex h-8 w-8 items-center justify-center rounded-lg border text-sm transition-colors";
+  const btnDefault =
+    "border-border/50 bg-surface text-muted-foreground hover:border-border hover:bg-background hover:text-foreground";
+  const btnActive = "border-border bg-background text-foreground font-medium";
+  const btnDisabled =
+    "border-border/30 bg-transparent text-muted-foreground/30 pointer-events-none";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-border">
+      {/* Left: count info */}
+      <p className="text-sm text-muted-foreground">
+        Showing{" "}
+        <span className="font-medium text-foreground">
+          {from}–{to}
+        </span>{" "}
+        of <span className="font-medium text-foreground">{totalItems}</span>{" "}
+        items
+      </p>
+
+      {/* Right: page size + buttons */}
+      <div className="flex items-center gap-2">
+        {/* Page size selector */}
+        <div className="flex items-center gap-1.5 mr-1">
+          <span className="text-xs text-muted-foreground">Show</span>
+          <select
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            className="h-8 px-2 text-xs transition-colors border rounded-lg border-border/50 bg-surface text-foreground focus:border-border focus:outline-none"
+          >
+            {PAGE_SIZE_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Divider */}
+        <div className="w-px h-4 mx-1 bg-border/50" />
+
+        {/* Prev */}
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={`${btnBase} ${currentPage === 1 ? btnDisabled : btnDefault}`}
+        >
+          ‹
+        </button>
+
+        {/* Page numbers */}
+        {getPageNumbers().map((p, idx) =>
+          p === "..." ? (
+            <span
+              key={`ellipsis-${idx}`}
+              className="flex items-center justify-center w-6 h-8 text-xs text-muted-foreground/50"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p as number)}
+              className={`${btnBase} ${currentPage === p ? btnActive : btnDefault}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
+        {/* Next */}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages || totalPages === 0}
+          className={`${btnBase} ${currentPage === totalPages || totalPages === 0 ? btnDisabled : btnDefault}`}
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Admin Page ────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const { getAccessTokenSilently, user, logout } = useAuth0();
@@ -408,6 +556,10 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [token, setToken] = useState("");
+
+  // ── Pagination state ──
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
 
   const showToast = (msg: string, type: "success" | "error") =>
     setToast({ msg, type });
@@ -448,6 +600,11 @@ export default function AdminPage() {
     if (token) fetchItems();
   }, [filterCategory]);
 
+  // Reset về trang 1 khi search hoặc filter thay đổi
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterCategory]);
+
   const handleDelete = async (id: string) => {
     try {
       const t = token || (await fetchToken());
@@ -470,7 +627,23 @@ export default function AdminPage() {
       item.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // Stats
+  // ── Pagination calculations ──
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedItems = filtered.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
+
   const stats = {
     total: items.length,
     categories: new Set(items.map((i) => i.category)).size,
@@ -479,7 +652,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex items-center justify-between px-6 py-4 mx-auto max-w-7xl">
           <div className="flex items-center gap-3">
@@ -497,7 +669,6 @@ export default function AdminPage() {
               </span>
             </div>
           </div>
-
           <div className="flex items-center gap-3">
             {user?.picture && (
               <img
@@ -523,7 +694,6 @@ export default function AdminPage() {
       </header>
 
       <main className="px-6 py-8 mx-auto space-y-8 max-w-7xl">
-        {/* Page title */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
@@ -541,14 +711,12 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           <StatCard label="Total Models" value={stats.total} accent />
           <StatCard label="Categories" value={stats.categories} />
           <StatCard label="With Thumbnail" value={stats.withThumbnail} />
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap gap-3">
           <input
             value={search}
@@ -577,7 +745,6 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Grid */}
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-8 h-8 border-2 rounded-full animate-spin border-primary border-t-transparent" />
@@ -592,15 +759,25 @@ export default function AdminPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((item) => (
-              <ItemCard key={item.id} item={item} onDelete={handleDelete} />
-            ))}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {paginatedItems.map((item) => (
+                <ItemCard key={item.id} item={item} onDelete={handleDelete} />
+              ))}
+            </div>
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={filtered.length}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </div>
         )}
       </main>
 
-      {/* Upload Modal */}
       {showUpload && (
         <UploadModal
           token={token}
@@ -612,7 +789,6 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Toast */}
       {toast && (
         <Toast
           msg={toast.msg}
