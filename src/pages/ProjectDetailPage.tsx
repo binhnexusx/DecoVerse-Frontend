@@ -10,6 +10,12 @@ import ShareProjectDialog from "@/components/ShareProject";
 import { Room3DViewer } from "@/components/three/Room3DViewer";
 import CommentPanel from "@/components/CommentPanel";
 import CommentButton from "@/components/CommentButton";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3000", {
+  transports: ["websocket"],
+  path: "/socket.io/",
+});
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -23,8 +29,11 @@ export default function ProjectDetailPage() {
   const [hoveredObject, setHoveredObject] = useState<string | null>(null);
 
   const [commentOpen, setCommentOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const role = "Client";
   const canComment = role === "Client" || role === "Owner";
+
   useEffect(() => {
     const fetchDetail = async () => {
       try {
@@ -34,7 +43,7 @@ export default function ProjectDetailPage() {
         setProject(data);
         if (data.versions?.length > 0) setSelectedVersion(data.versions[0]);
       } catch (error) {
-        console.error(error);
+        console.error("Error fetching project:", error);
       } finally {
         setLoading(false);
       }
@@ -42,18 +51,46 @@ export default function ProjectDetailPage() {
     if (id) fetchDetail();
   }, [id, getAccessTokenSilently]);
 
+  useEffect(() => {
+    if (!id) return;
+
+    socket.emit("joinProject", id);
+
+    const handleNewMessage = () => {
+      if (!commentOpen) {
+        setUnreadCount((prev) => prev + 1);
+      }
+    };
+
+    socket.on("receiveMessage", handleNewMessage);
+
+    return () => {
+      socket.off("receiveMessage", handleNewMessage);
+    };
+  }, [id, commentOpen]);
+
+  const handleToggleChat = () => {
+    const nextState = !commentOpen;
+    setCommentOpen(nextState);
+    if (nextState) {
+      setUnreadCount(0);
+    }
+  };
+
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-primary-500" size={40} />
       </div>
     );
+
   if (!project)
     return <div className="p-8 text-center">Project not found.</div>;
 
   return (
     <div className="min-h-screen pb-20 space-y-6 bg-slate-50/50">
       <Header title={project.name} subtitle="Manage Design History" />
+
       <div className="px-8 mx-auto space-y-6 max-w-7xl">
         <div className="flex items-center justify-between gap-4">
           <button
@@ -68,6 +105,7 @@ export default function ProjectDetailPage() {
             <Share className="w-4 h-4 mr-2" />
             Share Project
           </Button>
+
           <ShareProjectDialog
             open={open}
             onOpenChange={setOpen}
@@ -76,6 +114,7 @@ export default function ProjectDetailPage() {
             imageUrl={project.previewUrl}
           />
         </div>
+
         <div className="p-6 bg-white border shadow-sm rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <h3 className="flex items-center gap-2 font-bold text-slate-800">
@@ -130,7 +169,7 @@ export default function ProjectDetailPage() {
               onClick={() =>
                 navigate(`/editor/${project.id}?v=${selectedVersion.id}`)
               }
-              className="px-8 font-bold bg-primary-500 hover:bg-primary-600"
+              className="px-8 font-bold bg-primary-500 hover:bg-primary-600 text-white rounded-md"
             >
               Open Editor
             </Button>
@@ -143,9 +182,11 @@ export default function ProjectDetailPage() {
           selectedId={selectedVersion?.id}
         />
       </div>
+
       {canComment && (
-        <CommentButton onClick={() => setCommentOpen((prev) => !prev)} />
+        <CommentButton onClick={handleToggleChat} badgeCount={unreadCount} />
       )}
+
       <CommentPanel open={commentOpen} onClose={() => setCommentOpen(false)} />
     </div>
   );
