@@ -1,5 +1,4 @@
 import { Clock, History, CheckCircle2 } from "lucide-react";
-import RoomViewer3D from "./three/RoomViewer3D";
 
 interface ProjectVersion {
   id: string;
@@ -33,10 +32,10 @@ export default function VersionHistory({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mt-6">
-      <div className="flex items-center gap-2 mb-6 border-b pb-4 text-slate-800">
+    <div className="p-6 mt-6 bg-white border shadow-sm rounded-2xl border-slate-200">
+      <div className="flex items-center gap-2 pb-4 mb-6 border-b text-slate-800">
         <History className="text-cyan-500" size={20} />
-        <h3 className="font-bold text-lg">View version history</h3>
+        <h3 className="text-lg font-bold">View version history</h3>
       </div>
 
       <div className="grid grid-cols-1 gap-3">
@@ -60,17 +59,21 @@ export default function VersionHistory({
                       isActive ? "border-cyan-400" : "border-white"
                     }`}
                   >
-                    {v.designData ? (
-                      <RoomViewer3D designData={v.designData} />
-                    ) : (
+                    {v.previewUrl || projectPreviewUrl ? (
                       <img
-                        src={
-                          v.previewUrl ||
-                          projectPreviewUrl ||
-                          "https://via.placeholder.com/150"
-                        }
-                        className="w-full h-full object-cover"
+                        src={v.previewUrl || projectPreviewUrl}
+                        className="object-cover w-full h-full"
+                        alt={`Version ${v.version}`}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
                       />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full bg-slate-100">
+                        <span className="text-[9px] text-slate-400 text-center px-1">
+                          V{v.version}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -96,7 +99,7 @@ export default function VersionHistory({
               {isActive && (
                 <CheckCircle2
                   size={20}
-                  className="text-cyan-500 animate-in zoom-in duration-300"
+                  className="duration-300 text-cyan-500 animate-in zoom-in"
                 />
               )}
             </div>
