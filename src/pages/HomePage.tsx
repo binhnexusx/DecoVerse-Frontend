@@ -9,6 +9,7 @@ import type { HomeStats } from "@/types/home";
 import type { Project } from "@/types/project";
 import { memo } from "react";
 import { LoadingPage } from "./LoadingPage";
+import { useNavigate } from "react-router-dom";
 
 type StatItem = {
   key: keyof HomeStats;
@@ -109,6 +110,7 @@ const MemoizedStatCard = memo(StatCard);
 const MemoizedProjectCard = memo(ProjectCard);
 
 export default function Home() {
+  const navigate = useNavigate();
   const { stats, projects, loading, error } = useHome() as {
     stats?: HomeStats;
     projects: Project[];
@@ -143,7 +145,7 @@ export default function Home() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent Projects</h2>
 
-          <Button className="rounded-full">
+          <Button className="rounded-full" onClick={() => navigate("/ai")}>
             <Plus className="mr-2 h-4 w-4" />
             New Project
           </Button>
