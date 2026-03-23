@@ -1,8 +1,8 @@
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF, Environment } from "@react-three/drei";
+import { OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { Boxes, Loader2 } from "lucide-react";
+import { Boxes } from "lucide-react";
 
 function ModelViewer({ url, onLoad }: { url: string; onLoad: () => void }) {
   const { scene } = useGLTF(url);
