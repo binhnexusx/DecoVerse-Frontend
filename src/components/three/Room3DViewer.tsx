@@ -52,8 +52,35 @@ interface Room3DViewerProps {
 const gltfLoader = new GLTFLoader();
 const modelCache = new Map<string, THREE.Group>();
 
+function safeNum(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  return isFinite(n) ? n : fallback;
+}
+
+function safeSize(
+  size: { width: number; height: number; depth: number } | undefined
+) {
+  return {
+    width: Math.max(safeNum(size?.width, 1), 0.01),
+    height: Math.max(safeNum(size?.height, 1), 0.01),
+    depth: Math.max(safeNum(size?.depth, 1), 0.01),
+  };
+}
+
+function safePos(pos: { x: number; y: number; z: number } | undefined) {
+  return {
+    x: safeNum(pos?.x, 0),
+    y: safeNum(pos?.y, 0),
+    z: safeNum(pos?.z, 0),
+  };
+}
+
 function calcPy(obj: RoomObject): number {
-  return obj.modelUrl ? 0 : obj.size.height / 2;
+  return obj.modelUrl ? 0 : safeSize(obj.size).height / 2;
+}
+
+function meshY(obj: RoomObject): number {
+  return calcPy(obj) + safeNum(obj.position?.y, 0);
 }
 
 function placeModelOnFloor(model: THREE.Object3D) {
@@ -65,32 +92,30 @@ function placeModelOnFloor(model: THREE.Object3D) {
 }
 
 function makeBoxMesh(obj: RoomObject): THREE.Mesh {
-  const { width: ow, height: oh, depth: od } = obj.size;
+  const { width, height, depth } = safeSize(obj.size);
   let color = 0x888888;
-  const parsed = parseInt(obj.color.replace("#", ""), 16);
+  const parsed = parseInt((obj.color ?? "").replace("#", ""), 16);
   if (!isNaN(parsed)) color = parsed;
-
-  const geo = new THREE.BoxGeometry(ow, oh, od);
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.4,
-    transparent: true,
-    opacity: 0.8,
-  });
-
-  const mesh = new THREE.Mesh(geo, material);
-
-  const edges = new THREE.EdgesGeometry(geo);
-  const line = new THREE.LineSegments(
-    edges,
-    new THREE.LineBasicMaterial({
-      color: 0x000000,
-      opacity: 0.3,
+  const geo = new THREE.BoxGeometry(width, height, depth);
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.4,
       transparent: true,
+      opacity: 0.8,
     })
   );
-  mesh.add(line);
-
+  mesh.add(
+    new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({
+        color: 0x000000,
+        opacity: 0.3,
+        transparent: true,
+      })
+    )
+  );
   return mesh;
 }
 
@@ -98,19 +123,22 @@ function makeOutline(
   mesh: THREE.Object3D,
   color: string,
   pad: number
-): THREE.LineSegments {
+): THREE.LineSegments | null {
   const box = new THREE.Box3().setFromObject(mesh);
+  if (!isFinite(box.min.x) || !isFinite(box.max.x)) return null;
   const sz = box.getSize(new THREE.Vector3());
   const ct = box.getCenter(new THREE.Vector3());
-
   const line = new THREE.LineSegments(
     new THREE.EdgesGeometry(
-      new THREE.BoxGeometry(sz.x + pad, sz.y + pad, sz.z + pad)
+      new THREE.BoxGeometry(
+        Math.max(sz.x + pad, 0.01),
+        Math.max(sz.y + pad, 0.01),
+        Math.max(sz.z + pad, 0.01)
+      )
     ),
     new THREE.LineBasicMaterial({ color: new THREE.Color(color) })
   );
   line.position.copy(ct);
-
   return line;
 }
 
@@ -137,6 +165,10 @@ export function Room3DViewer(props: Room3DViewerProps) {
     frameId: number;
     doSelect: (mesh: THREE.Object3D) => void;
     doDeselect: () => void;
+    // KEY: remove mesh by id — tránh stale closure placeholder reference
+    removeMeshById: (id: string) => void;
+    // KEY: apply GLTF model cho một obj, replace bất kỳ mesh nào đang giữ id đó
+    applyGLTF: (obj: RoomObject, rawModel: THREE.Group) => void;
   } | null>(null);
 
   useEffect(() => {
@@ -167,7 +199,6 @@ export function Room3DViewer(props: Room3DViewerProps) {
       0.01,
       1000
     );
-
     if (p.initialCameraPosition) {
       camera.position.set(
         p.initialCameraPosition.x,
@@ -181,7 +212,6 @@ export function Room3DViewer(props: Room3DViewerProps) {
     const orbit = new OrbitControls(camera, canvas);
     orbit.enableDamping = true;
     orbit.dampingFactor = 0.07;
-
     if (p.initialCameraTarget) {
       orbit.target.set(
         p.initialCameraTarget.x,
@@ -191,7 +221,6 @@ export function Room3DViewer(props: Room3DViewerProps) {
     } else {
       orbit.target.set(0, p.roomSize.height / 2, 0);
     }
-
     orbit.maxPolarAngle = Math.PI / 2;
     orbit.minDistance = maxDim * 0.3;
     orbit.maxDistance = maxDim * 4;
@@ -201,47 +230,51 @@ export function Room3DViewer(props: Room3DViewerProps) {
       tc = new TransformControls(camera, canvas);
       tc.setMode(p.transformMode ?? "translate");
       tc.setSpace("world");
-      const helper = (
-        tc as unknown as { getHelper: () => THREE.Object3D }
-      ).getHelper();
-      scene.add(helper);
-
+      scene.add(
+        (tc as unknown as { getHelper: () => THREE.Object3D }).getHelper()
+      );
       tc.addEventListener("dragging-changed", (e) => {
         orbit.enabled = !(e as { value: unknown }).value;
       });
-
       tc.addEventListener("objectChange", () => {
         const mesh = tc!.object as THREE.Object3D;
         const id = mesh?.userData?.id as string | undefined;
         if (!mesh || !id) return;
-
         const orig = propsRef.current.objects.find((o) => o.id === id);
         if (!orig) return;
-
-        const minY = orig.size.height / 2;
-        if (mesh.position.y < minY) mesh.position.y = minY;
-
+        const py = calcPy(orig);
+        if (mesh.position.y < py) mesh.position.y = py;
+        const origSize = safeSize(orig.size);
         propsRef.current.onObjectUpdate?.(id, {
           position: {
-            x: parseFloat(mesh.position.x.toFixed(3)),
-            y: parseFloat((mesh.position.y - orig.size.height / 2).toFixed(3)),
-            z: parseFloat(mesh.position.z.toFixed(3)),
+            x: parseFloat(safeNum(mesh.position.x).toFixed(3)),
+            y: parseFloat(safeNum(mesh.position.y - py).toFixed(3)),
+            z: parseFloat(safeNum(mesh.position.z).toFixed(3)),
           },
           rotation: {
-            y: parseFloat(THREE.MathUtils.radToDeg(mesh.rotation.y).toFixed(1)),
+            y: parseFloat(
+              safeNum(THREE.MathUtils.radToDeg(mesh.rotation.y)).toFixed(1)
+            ),
           },
-          size: {
-            width: parseFloat((orig.size.width * mesh.scale.x).toFixed(3)),
-            height: parseFloat((orig.size.height * mesh.scale.y).toFixed(3)),
-            depth: parseFloat((orig.size.depth * mesh.scale.z).toFixed(3)),
-          },
+          size: orig.modelUrl
+            ? origSize
+            : {
+                width: parseFloat(
+                  (origSize.width * safeNum(mesh.scale.x, 1)).toFixed(3)
+                ),
+                height: parseFloat(
+                  (origSize.height * safeNum(mesh.scale.y, 1)).toFixed(3)
+                ),
+                depth: parseFloat(
+                  (origSize.depth * safeNum(mesh.scale.z, 1)).toFixed(3)
+                ),
+              },
         });
       });
     }
 
-    // Lighting
+    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-
     const dl = new THREE.DirectionalLight(0xffffff, 1.2);
     dl.position.set(maxDim * 0.5, maxDim * 0.8, maxDim * 0.5);
     dl.castShadow = true;
@@ -253,12 +286,11 @@ export function Room3DViewer(props: Room3DViewerProps) {
     dl.shadow.camera.top = maxDim;
     dl.shadow.camera.bottom = -maxDim;
     scene.add(dl);
-
     const fill = new THREE.DirectionalLight(0xe0f0ff, 0.4);
     fill.position.set(-maxDim * 0.5, maxDim * 0.3, maxDim * 0.5);
     scene.add(fill);
 
-    // Floor
+    // Floor + grid + outline
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(p.roomSize.width, p.roomSize.depth),
       new THREE.MeshStandardMaterial({ color: 0xdde1e7, roughness: 0.8 })
@@ -277,7 +309,6 @@ export function Room3DViewer(props: Room3DViewerProps) {
       g.position.y = 0.002;
       scene.add(g);
     }
-
     if (p.showRoomOutline !== false) {
       const rl = new THREE.LineSegments(
         new THREE.EdgesGeometry(
@@ -300,6 +331,75 @@ export function Room3DViewer(props: Room3DViewerProps) {
     const meshes: THREE.Object3D[] = [];
     const meshMap = new Map<string, THREE.Object3D>();
 
+    // ── KEY: removeMeshById ───────────────────────────────────────────────────
+    // Luôn tìm theo id trong meshMap thay vì dùng reference closure
+    // Tránh bug: placeholder còn tồn tại sau khi wrapper được add
+    const removeMeshById = (id: string) => {
+      const existing = meshMap.get(id);
+      if (existing) {
+        scene.remove(existing);
+        const idx = meshes.indexOf(existing);
+        if (idx !== -1) meshes.splice(idx, 1);
+        meshMap.delete(id);
+      }
+    };
+
+    // ── KEY: applyGLTF ────────────────────────────────────────────────────────
+    // Tách ra thành hàm riêng để cả init lẫn useEffect sync đều dùng chung
+    const applyGLTF = (obj: RoomObject, rawModel: THREE.Group) => {
+      const s = S.current;
+      if (!s) return;
+
+      const model = rawModel.clone();
+      const bbox = new THREE.Box3().setFromObject(model);
+      if (!isFinite(bbox.min.x)) {
+        console.warn("[Room3DViewer] NaN bbox, skip:", obj.modelUrl);
+        return;
+      }
+
+      const bSize = bbox.getSize(new THREE.Vector3());
+      const objSize = safeSize(obj.size);
+      const scale = Math.min(
+        objSize.width / bSize.x,
+        objSize.height / bSize.y,
+        objSize.depth / bSize.z
+      );
+      if (!isFinite(scale) || scale <= 0) {
+        console.warn(
+          "[Room3DViewer] invalid scale, skip:",
+          obj.modelUrl,
+          scale
+        );
+        return;
+      }
+
+      model.scale.setScalar(scale);
+      placeModelOnFloor(model);
+
+      const pos = safePos(obj.position);
+      const rotY = safeNum(obj.rotation?.y, 0);
+      const my = meshY(obj);
+
+      const wrapper = new THREE.Group();
+      wrapper.position.set(pos.x, my, pos.z);
+      wrapper.rotation.y = THREE.MathUtils.degToRad(rotY);
+      wrapper.userData = { id: obj.id, label: obj.name };
+      model.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      wrapper.add(model);
+
+      // Remove BẤT KỲ mesh nào đang giữ id này (placeholder hoặc wrapper cũ)
+      s.removeMeshById(obj.id);
+
+      s.scene.add(wrapper);
+      s.meshes.push(wrapper);
+      s.meshMap.set(obj.id, wrapper);
+    };
+
     const state = {
       renderer,
       scene,
@@ -314,6 +414,8 @@ export function Room3DViewer(props: Room3DViewerProps) {
       frameId: 0,
       doSelect: (_mesh: THREE.Object3D) => {},
       doDeselect: () => {},
+      removeMeshById,
+      applyGLTF,
     };
     S.current = state;
 
@@ -324,15 +426,17 @@ export function Room3DViewer(props: Room3DViewerProps) {
       }
       state.selectedMesh = mesh;
       tc?.attach(mesh);
-      state.selectLine = makeOutline(
+      const outline = makeOutline(
         mesh,
         propsRef.current.selectedColor ?? "#06b6d4",
         0.12
       );
-      scene.add(state.selectLine);
+      if (outline) {
+        state.selectLine = outline;
+        scene.add(outline);
+      }
       propsRef.current.onObjectSelect?.(mesh.userData.id as string);
     };
-
     const doDeselect = () => {
       tc?.detach();
       state.selectedMesh = null;
@@ -342,19 +446,27 @@ export function Room3DViewer(props: Room3DViewerProps) {
       }
       propsRef.current.onObjectSelect?.(null);
     };
-
     state.doSelect = doSelect;
     state.doDeselect = doDeselect;
 
+    // ── Add model to scene (with placeholder) ─────────────────────────────────
     const addModelToScene = (obj: RoomObject) => {
       if (!obj.modelUrl) return;
 
-      const py = calcPy(obj);
+      // Nếu model đã cache → apply ngay, không cần placeholder
+      if (modelCache.has(obj.modelUrl)) {
+        applyGLTF(obj, modelCache.get(obj.modelUrl)!);
+        return;
+      }
 
-      // Placeholder box while loading
+      // Chưa cache → show placeholder, load async
+      const pos = safePos(obj.position);
+      const rotY = safeNum(obj.rotation?.y, 0);
+      const my = meshY(obj);
+
       const placeholder = makeBoxMesh(obj);
-      placeholder.position.set(obj.position.x, py, obj.position.z);
-      placeholder.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+      placeholder.position.set(pos.x, my, pos.z);
+      placeholder.rotation.y = THREE.MathUtils.degToRad(rotY);
       placeholder.castShadow = true;
       placeholder.receiveShadow = true;
       placeholder.userData = {
@@ -363,55 +475,10 @@ export function Room3DViewer(props: Room3DViewerProps) {
         isPlaceholder: true,
       };
 
+      removeMeshById(obj.id); // remove cũ nếu có
       scene.add(placeholder);
       meshes.push(placeholder);
       meshMap.set(obj.id, placeholder);
-
-      const applyModel = (rawModel: THREE.Group) => {
-        const s = S.current;
-        if (!s) return;
-
-        const model = rawModel.clone();
-
-        const box = new THREE.Box3().setFromObject(model);
-        const size = box.getSize(new THREE.Vector3());
-        const scale = Math.min(
-          obj.size.width / size.x,
-          obj.size.height / size.y,
-          obj.size.depth / size.z
-        );
-        model.scale.setScalar(scale);
-
-        // Căn đáy model về Y=0 của wrapper
-        placeModelOnFloor(model);
-
-        const wrapper = new THREE.Group();
-        wrapper.position.set(obj.position.x, py, obj.position.z);
-        wrapper.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
-        wrapper.userData = { id: obj.id, label: obj.name };
-
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-
-        wrapper.add(model);
-
-        s.scene.remove(placeholder);
-        const index = s.meshes.indexOf(placeholder);
-        if (index !== -1) s.meshes.splice(index, 1);
-
-        s.scene.add(wrapper);
-        s.meshes.push(wrapper);
-        s.meshMap.set(obj.id, wrapper);
-      };
-
-      if (modelCache.has(obj.modelUrl)) {
-        applyModel(modelCache.get(obj.modelUrl)!);
-        return;
-      }
 
       if (!loadingModels.current.has(obj.modelUrl)) {
         loadingModels.current.add(obj.modelUrl);
@@ -419,12 +486,16 @@ export function Room3DViewer(props: Room3DViewerProps) {
           obj.modelUrl,
           (gltf) => {
             modelCache.set(obj.modelUrl!, gltf.scene.clone());
-            applyModel(gltf.scene);
+            applyGLTF(obj, gltf.scene); // applyGLTF sẽ removeMeshById(placeholder) và add wrapper
             loadingModels.current.delete(obj.modelUrl!);
           },
           undefined,
-          (error) => {
-            console.error("Failed to load model:", obj.modelUrl, error);
+          (err) => {
+            console.error(
+              "[Room3DViewer] Failed to load model:",
+              obj.modelUrl,
+              err
+            );
             loadingModels.current.delete(obj.modelUrl!);
           }
         );
@@ -437,9 +508,9 @@ export function Room3DViewer(props: Room3DViewerProps) {
         addModelToScene(obj);
       } else {
         const mesh = makeBoxMesh(obj);
-        const py = calcPy(obj);
-        mesh.position.set(obj.position.x, py, obj.position.z);
-        mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+        const pos = safePos(obj.position);
+        mesh.position.set(pos.x, meshY(obj), pos.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(safeNum(obj.rotation?.y, 0));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData = { id: obj.id, label: obj.name };
@@ -462,7 +533,6 @@ export function Room3DViewer(props: Room3DViewerProps) {
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObjects(state.meshes, true);
       const hit = hits.find(
@@ -471,23 +541,23 @@ export function Room3DViewer(props: Room3DViewerProps) {
       const id = hit
         ? (hit.object.userData?.id ?? hit.object.parent?.userData?.id ?? null)
         : null;
-
       propsRef.current.onObjectHover?.(id as string | null);
-
       if (state.hoverLine) {
         scene.remove(state.hoverLine);
         state.hoverLine = null;
       }
-
       if (id && id !== state.selectedMesh?.userData?.id) {
         const m = meshMap.get(id as string);
         if (m) {
-          state.hoverLine = makeOutline(
+          const outline = makeOutline(
             m,
             propsRef.current.hoverColor ?? "#3b82f6",
             0.1
           );
-          scene.add(state.hoverLine);
+          if (outline) {
+            state.hoverLine = outline;
+            scene.add(outline);
+          }
         }
       }
     });
@@ -502,17 +572,14 @@ export function Room3DViewer(props: Room3DViewerProps) {
         return;
       }
       downPos = null;
-
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObjects(state.meshes, true);
       const hit = hits.find(
         (h) => h.object.userData?.id || h.object.parent?.userData?.id
       );
-
       if (hit) {
         const id = (hit.object.userData?.id ??
           hit.object.parent?.userData?.id) as string;
@@ -554,111 +621,85 @@ export function Room3DViewer(props: Room3DViewerProps) {
     };
   }, []);
 
-  // Update objects when props.objects changes
+  // ── Sync objects → scene ───────────────────────────────────────────────────
   useEffect(() => {
     const s = S.current;
     if (!s) return;
 
     const newIds = new Set(props.objects.map((o) => o.id));
 
-    s.meshMap.forEach((mesh, id) => {
-      if (!newIds.has(id)) {
-        s.scene.remove(mesh);
-        s.meshMap.delete(id);
-        const i = s.meshes.indexOf(mesh);
-        if (i !== -1) s.meshes.splice(i, 1);
-      }
+    // Remove deleted
+    [...s.meshMap.keys()].forEach((id) => {
+      if (!newIds.has(id)) s.removeMeshById(id);
     });
 
     props.objects.forEach((obj) => {
-      const py = calcPy(obj);
+      const my = meshY(obj);
+      const pos = safePos(obj.position);
+      const rotY = THREE.MathUtils.degToRad(safeNum(obj.rotation?.y, 0));
 
       if (s.meshMap.has(obj.id)) {
         const mesh = s.meshMap.get(obj.id)!;
+
+        // Nếu vẫn là placeholder nhưng model đã cache → replace ngay
+        if (
+          mesh.userData.isPlaceholder &&
+          obj.modelUrl &&
+          modelCache.has(obj.modelUrl)
+        ) {
+          s.applyGLTF(obj, modelCache.get(obj.modelUrl)!);
+          return;
+        }
+
         if (s.tc?.object !== mesh) {
-          mesh.position.set(obj.position.x, py, obj.position.z);
-          mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+          mesh.position.set(pos.x, my, pos.z);
+          mesh.rotation.y = rotY;
         }
         mesh.visible = obj.visible !== false;
       } else {
+        // New object
         if (obj.modelUrl) {
-          const placeholder = makeBoxMesh(obj);
-          placeholder.position.set(obj.position.x, py, obj.position.z);
-          placeholder.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
-          placeholder.castShadow = true;
-          placeholder.receiveShadow = true;
-          placeholder.userData = {
-            id: obj.id,
-            label: obj.name,
-            isPlaceholder: true,
-          };
-
-          s.scene.add(placeholder);
-          s.meshes.push(placeholder);
-          s.meshMap.set(obj.id, placeholder);
-
-          const applyModel = (rawModel: THREE.Group) => {
-            const sc = S.current;
-            if (!sc) return;
-
-            const model = rawModel.clone();
-
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const scale = Math.min(
-              obj.size.width / size.x,
-              obj.size.height / size.y,
-              obj.size.depth / size.z
-            );
-            model.scale.setScalar(scale);
-
-            placeModelOnFloor(model);
-
-            const wrapper = new THREE.Group();
-            wrapper.position.set(obj.position.x, py, obj.position.z);
-            wrapper.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
-            wrapper.userData = { id: obj.id, label: obj.name };
-
-            model.traverse((child) => {
-              if ((child as THREE.Mesh).isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-              }
-            });
-
-            wrapper.add(model);
-
-            sc.scene.remove(placeholder);
-            const pi = sc.meshes.indexOf(placeholder);
-            if (pi !== -1) sc.meshes.splice(pi, 1);
-
-            sc.scene.add(wrapper);
-            sc.meshes.push(wrapper);
-            sc.meshMap.set(obj.id, wrapper);
-          };
-
+          // Nếu model đã cache → apply ngay không cần placeholder
           if (modelCache.has(obj.modelUrl)) {
-            applyModel(modelCache.get(obj.modelUrl)!);
-          } else if (!loadingModels.current.has(obj.modelUrl)) {
-            loadingModels.current.add(obj.modelUrl);
-            gltfLoader.load(
-              obj.modelUrl,
-              (gltf) => {
-                modelCache.set(obj.modelUrl!, gltf.scene.clone());
-                applyModel(gltf.scene);
-                loadingModels.current.delete(obj.modelUrl!);
-              },
-              undefined,
-              (error) => {
-                console.error("Failed to load model:", obj.modelUrl, error);
-                loadingModels.current.delete(obj.modelUrl!);
-              }
-            );
+            s.applyGLTF(obj, modelCache.get(obj.modelUrl)!);
+          } else {
+            // Placeholder + load async
+            const placeholder = makeBoxMesh(obj);
+            placeholder.position.set(pos.x, my, pos.z);
+            placeholder.rotation.y = rotY;
+            placeholder.castShadow = true;
+            placeholder.receiveShadow = true;
+            placeholder.userData = {
+              id: obj.id,
+              label: obj.name,
+              isPlaceholder: true,
+            };
+            s.removeMeshById(obj.id);
+            s.scene.add(placeholder);
+            s.meshes.push(placeholder);
+            s.meshMap.set(obj.id, placeholder);
+
+            if (!loadingModels.current.has(obj.modelUrl)) {
+              loadingModels.current.add(obj.modelUrl);
+              gltfLoader.load(
+                obj.modelUrl,
+                (gltf) => {
+                  modelCache.set(obj.modelUrl!, gltf.scene.clone());
+                  s.applyGLTF(obj, gltf.scene);
+                  loadingModels.current.delete(obj.modelUrl!);
+                },
+                undefined,
+                (err) => {
+                  console.error("[Room3DViewer] model load error:", err);
+                  loadingModels.current.delete(obj.modelUrl!);
+                }
+              );
+            }
           }
         } else {
           const mesh = makeBoxMesh(obj);
-          mesh.position.set(obj.position.x, calcPy(obj), obj.position.z);
-          mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+          mesh.position.set(pos.x, my, pos.z);
+          mesh.rotation.y = rotY;
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           mesh.userData = { id: obj.id, label: obj.name };
