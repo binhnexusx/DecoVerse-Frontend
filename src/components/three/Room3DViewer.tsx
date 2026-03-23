@@ -1,8 +1,8 @@
-// components/Room3DViewer.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 interface RoomObject {
   id: string;
@@ -13,6 +13,9 @@ interface RoomObject {
   position: { x: number; y: number; z: number };
   size: { width: number; height: number; depth: number };
   rotation: { y: number };
+  visible?: boolean;
+  furnitureItemId?: string;
+  modelUrl?: string;
 }
 
 interface RoomSize {
@@ -24,513 +27,675 @@ interface RoomSize {
 interface Room3DViewerProps {
   roomSize: RoomSize;
   objects: RoomObject[];
-  height?: number | string; // Có thể là number (px) hoặc string (100%, 100vh)
+  height?: number | string;
   className?: string;
-
-  // Interaction modes
   interactive?: boolean;
-  onObjectSelect?: (objectId: string | null) => void;
-  onObjectHover?: (objectId: string | null) => void;
-  onObjectUpdate?: (objectId: string, updates: Partial<RoomObject>) => void;
-
-  // Visual options
+  onObjectSelect?: (id: string | null) => void;
+  onObjectHover?: (id: string | null) => void;
+  onObjectUpdate?: (id: string, updates: Partial<RoomObject>) => void;
+  onCameraChange?: (
+    pos: { x: number; y: number; z: number },
+    target: { x: number; y: number; z: number }
+  ) => void;
   showGrid?: boolean;
   showRoomOutline?: boolean;
   backgroundColor?: string;
   hoverColor?: string;
   selectedColor?: string;
-
-  // External control
   selectedObjectId?: string | null;
   hoveredObjectId?: string | null;
   transformMode?: "translate" | "rotate" | "scale";
+  initialCameraPosition?: { x: number; y: number; z: number } | null;
+  initialCameraTarget?: { x: number; y: number; z: number } | null;
 }
 
-export function Room3DViewer({
-  roomSize,
-  objects,
-  height = "100%", // Đổi mặc định thành 100% thay vì 550px
-  className = "",
-  interactive = false,
-  onObjectSelect,
-  onObjectHover,
-  onObjectUpdate,
-  showGrid = true,
-  showRoomOutline = true,
-  backgroundColor = "#f0f0f0",
-  hoverColor = "#3b82f6",
-  selectedObjectId,
-  hoveredObjectId,
-  transformMode = "translate",
-}: Room3DViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const objectsRef = useRef<Map<string, THREE.Mesh>>(new Map());
-  const orbitControlsRef = useRef<OrbitControls | null>(null);
-  const transformControlsRef = useRef<TransformControls | null>(null);
-  const frameRef = useRef<number>(0);
-  const highlightRef = useRef<THREE.LineSegments | null>(null);
+const gltfLoader = new GLTFLoader();
+const modelCache = new Map<string, THREE.Group>();
 
-  // Track internal hover/selection for non-interactive mode
-  const [internalHoveredId, setInternalHoveredId] = useState<string | null>(
-    null
+function calcPy(obj: RoomObject): number {
+  return obj.modelUrl ? 0 : obj.size.height / 2;
+}
+
+function placeModelOnFloor(model: THREE.Object3D) {
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  model.position.x -= center.x;
+  model.position.z -= center.z;
+  model.position.y -= box.min.y;
+}
+
+function makeBoxMesh(obj: RoomObject): THREE.Mesh {
+  const { width: ow, height: oh, depth: od } = obj.size;
+  let color = 0x888888;
+  const parsed = parseInt(obj.color.replace("#", ""), 16);
+  if (!isNaN(parsed)) color = parsed;
+
+  const geo = new THREE.BoxGeometry(ow, oh, od);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.4,
+    transparent: true,
+    opacity: 0.8,
+  });
+
+  const mesh = new THREE.Mesh(geo, material);
+
+  const edges = new THREE.EdgesGeometry(geo);
+  const line = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({
+      color: 0x000000,
+      opacity: 0.3,
+      transparent: true,
+    })
   );
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
-    null
+  mesh.add(line);
+
+  return mesh;
+}
+
+function makeOutline(
+  mesh: THREE.Object3D,
+  color: string,
+  pad: number
+): THREE.LineSegments {
+  const box = new THREE.Box3().setFromObject(mesh);
+  const sz = box.getSize(new THREE.Vector3());
+  const ct = box.getCenter(new THREE.Vector3());
+
+  const line = new THREE.LineSegments(
+    new THREE.EdgesGeometry(
+      new THREE.BoxGeometry(sz.x + pad, sz.y + pad, sz.z + pad)
+    ),
+    new THREE.LineBasicMaterial({ color: new THREE.Color(color) })
   );
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  line.position.copy(ct);
 
-  // Use external or internal state
-  const effectiveHoveredId = interactive
-    ? (hoveredObjectId ?? null)
-    : internalHoveredId;
+  return line;
+}
 
-  const effectiveSelectedId = interactive
-    ? (selectedObjectId ?? null)
-    : internalSelectedId;
+export function Room3DViewer(props: Room3DViewerProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const propsRef = useRef(props);
+  const loadingModels = useRef<Set<string>>(new Set());
 
-  // Track container size for responsive rendering
   useEffect(() => {
-    if (!containerRef.current) return;
+    propsRef.current = props;
+  });
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        setContainerSize({ width, height });
+  const S = useRef<{
+    renderer: THREE.WebGLRenderer;
+    scene: THREE.Scene;
+    camera: THREE.PerspectiveCamera;
+    orbit: OrbitControls;
+    tc: TransformControls | null;
+    meshes: THREE.Object3D[];
+    meshMap: Map<string, THREE.Object3D>;
+    selectedMesh: THREE.Object3D | null;
+    selectLine: THREE.LineSegments | null;
+    hoverLine: THREE.LineSegments | null;
+    frameId: number;
+    doSelect: (mesh: THREE.Object3D) => void;
+    doDeselect: () => void;
+  } | null>(null);
 
-        // Update camera aspect and renderer size when container resizes
-        if (cameraRef.current && rendererRef.current) {
-          cameraRef.current.aspect = width / height;
-          cameraRef.current.updateProjectionMatrix();
-          rendererRef.current.setSize(width, height);
-        }
-      }
-    });
-
-    resizeObserver.observe(containerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  const calculateObjectPosition = (obj: RoomObject) => {
-    const FLOOR_CATEGORIES = [
-      "bed",
-      "sofa",
-      "chair",
-      "desk",
-      "dining_table",
-      "coffee_table",
-      "wardrobe",
-      "shelf",
-      "plant",
-      "rug",
-      "gaming_chair",
-      "gaming_desk",
-    ];
-
-    if (FLOOR_CATEGORIES.includes(obj.category || "")) {
-      return {
-        x: obj.position.x,
-        y: obj.size.height / 2,
-        z: obj.position.z,
-      };
-    } else {
-      return {
-        x: obj.position.x,
-        y: obj.position.y + obj.size.height / 2,
-        z: obj.position.z,
-      };
-    }
-  };
-
-  const highlightObject = (objectId: string | null) => {
-    if (highlightRef.current && sceneRef.current) {
-      sceneRef.current.remove(highlightRef.current);
-      highlightRef.current = null;
-    }
-
-    if (!objectId || !sceneRef.current) return;
-
-    const obj = objectsRef.current.get(objectId);
-    if (!obj) return;
-
-    const box = new THREE.Box3().setFromObject(obj);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-
-    const geometry = new THREE.BoxGeometry(
-      size.x + 0.1,
-      size.y + 0.1,
-      size.z + 0.1
-    );
-    const edges = new THREE.EdgesGeometry(geometry);
-    const line = new THREE.LineSegments(
-      edges,
-      new THREE.LineBasicMaterial({ color: hoverColor })
-    );
-    line.position.copy(center);
-
-    sceneRef.current.add(line);
-    highlightRef.current = line;
-  };
-
-  // Initialize Three.js scene
   useEffect(() => {
-    if (
-      !containerRef.current ||
-      containerSize.width === 0 ||
-      containerSize.height === 0
-    )
-      return;
+    const wrap = wrapRef.current;
+    if (!wrap) return;
 
-    // Cleanup previous renderer
-    if (rendererRef.current) {
-      cancelAnimationFrame(frameRef.current);
-      rendererRef.current.dispose();
-      containerRef.current.innerHTML = "";
-    }
-    objectsRef.current.clear();
+    const p = propsRef.current;
+    const maxDim = Math.max(
+      p.roomSize.width,
+      p.roomSize.depth,
+      p.roomSize.height
+    );
 
-    const container = containerRef.current;
-    const width = containerSize.width;
-    const height = containerSize.height;
-
-    // Scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(backgroundColor);
-    sceneRef.current = scene;
-
-    // Camera - điều chỉnh vị trí camera dựa trên kích thước phòng
-    const maxDim = Math.max(roomSize.width, roomSize.depth, roomSize.height);
-    const cameraDistance = maxDim * 1.5;
-
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, roomSize.height * 0.6, cameraDistance);
-    camera.lookAt(0, roomSize.height / 2, 0);
-    cameraRef.current = camera;
-
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
+    wrap.appendChild(renderer.domElement);
+    const canvas = renderer.domElement;
 
-    // OrbitControls
-    const orbit = new OrbitControls(camera, renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(p.backgroundColor ?? "#f1f5f9");
+
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      wrap.clientWidth / wrap.clientHeight,
+      0.01,
+      1000
+    );
+
+    if (p.initialCameraPosition) {
+      camera.position.set(
+        p.initialCameraPosition.x,
+        p.initialCameraPosition.y,
+        p.initialCameraPosition.z
+      );
+    } else {
+      camera.position.set(0, p.roomSize.height * 0.6, maxDim * 1.5);
+    }
+
+    const orbit = new OrbitControls(camera, canvas);
     orbit.enableDamping = true;
-    orbit.dampingFactor = 0.05;
-    orbit.target.set(0, roomSize.height / 2, 0);
+    orbit.dampingFactor = 0.07;
+
+    if (p.initialCameraTarget) {
+      orbit.target.set(
+        p.initialCameraTarget.x,
+        p.initialCameraTarget.y,
+        p.initialCameraTarget.z
+      );
+    } else {
+      orbit.target.set(0, p.roomSize.height / 2, 0);
+    }
+
     orbit.maxPolarAngle = Math.PI / 2;
-    orbit.minDistance = maxDim * 0.5;
-    orbit.maxDistance = maxDim * 3;
-    orbitControlsRef.current = orbit;
+    orbit.minDistance = maxDim * 0.3;
+    orbit.maxDistance = maxDim * 4;
 
-    // TransformControls (only for interactive mode)
-    if (interactive) {
-      const transform = new TransformControls(camera, renderer.domElement);
-      scene.add(transform as unknown as THREE.Object3D);
-      transformControlsRef.current = transform;
+    let tc: TransformControls | null = null;
+    if (p.interactive) {
+      tc = new TransformControls(camera, canvas);
+      tc.setMode(p.transformMode ?? "translate");
+      tc.setSpace("world");
+      const helper = (
+        tc as unknown as { getHelper: () => THREE.Object3D }
+      ).getHelper();
+      scene.add(helper);
 
-      transform.addEventListener("dragging-changed", (e) => {
-        orbit.enabled = !e.value;
+      tc.addEventListener("dragging-changed", (e) => {
+        orbit.enabled = !(e as { value: unknown }).value;
       });
 
-      // Transform mode
-      transform.setMode(transformMode);
+      tc.addEventListener("objectChange", () => {
+        const mesh = tc!.object as THREE.Object3D;
+        const id = mesh?.userData?.id as string | undefined;
+        if (!mesh || !id) return;
 
-      // Update handler
-      transform.addEventListener("objectChange", () => {
-        if (onObjectUpdate && effectiveSelectedId) {
-          const mesh = transform.object as THREE.Mesh;
-          if (mesh) {
-            const originalObj = objects.find(
-              (o) => o.id === effectiveSelectedId
-            );
-            if (originalObj) {
-              onObjectUpdate(effectiveSelectedId, {
-                position: {
-                  x: mesh.position.x,
-                  y: mesh.position.y - originalObj.size.height / 2,
-                  z: mesh.position.z,
-                },
-                rotation: { y: mesh.rotation.y },
-              });
-            }
-          }
-        }
+        const orig = propsRef.current.objects.find((o) => o.id === id);
+        if (!orig) return;
+
+        const minY = orig.size.height / 2;
+        if (mesh.position.y < minY) mesh.position.y = minY;
+
+        propsRef.current.onObjectUpdate?.(id, {
+          position: {
+            x: parseFloat(mesh.position.x.toFixed(3)),
+            y: parseFloat((mesh.position.y - orig.size.height / 2).toFixed(3)),
+            z: parseFloat(mesh.position.z.toFixed(3)),
+          },
+          rotation: {
+            y: parseFloat(THREE.MathUtils.radToDeg(mesh.rotation.y).toFixed(1)),
+          },
+          size: {
+            width: parseFloat((orig.size.width * mesh.scale.x).toFixed(3)),
+            height: parseFloat((orig.size.height * mesh.scale.y).toFixed(3)),
+            depth: parseFloat((orig.size.depth * mesh.scale.z).toFixed(3)),
+          },
+        });
       });
     }
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 
-    const dirLight = new THREE.DirectionalLight(0xfff0e0, 1.2);
-    dirLight.position.set(maxDim * 0.5, maxDim * 0.8, maxDim * 0.5);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = maxDim * 2;
-    dirLight.shadow.camera.left = -maxDim;
-    dirLight.shadow.camera.right = maxDim;
-    dirLight.shadow.camera.top = maxDim;
-    dirLight.shadow.camera.bottom = -maxDim;
-    scene.add(dirLight);
+    const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+    dl.position.set(maxDim * 0.5, maxDim * 0.8, maxDim * 0.5);
+    dl.castShadow = true;
+    dl.shadow.mapSize.set(2048, 2048);
+    dl.shadow.camera.near = 0.5;
+    dl.shadow.camera.far = maxDim * 2;
+    dl.shadow.camera.left = -maxDim;
+    dl.shadow.camera.right = maxDim;
+    dl.shadow.camera.top = maxDim;
+    dl.shadow.camera.bottom = -maxDim;
+    scene.add(dl);
 
-    const fillLight = new THREE.DirectionalLight(0xe0f0ff, 0.5);
-    fillLight.position.set(-maxDim * 0.5, maxDim * 0.3, maxDim * 0.5);
-    scene.add(fillLight);
+    const fill = new THREE.DirectionalLight(0xe0f0ff, 0.4);
+    fill.position.set(-maxDim * 0.5, maxDim * 0.3, maxDim * 0.5);
+    scene.add(fill);
 
     // Floor
-    const floorGeo = new THREE.PlaneGeometry(roomSize.width, roomSize.depth);
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: 0xe0e0e0,
-      roughness: 0.8,
-      metalness: 0.1,
-    });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(p.roomSize.width, p.roomSize.depth),
+      new THREE.MeshStandardMaterial({ color: 0xdde1e7, roughness: 0.8 })
+    );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
-    floor.position.y = 0;
     scene.add(floor);
 
-    // Grid
-    if (showGrid) {
-      const gridSize = Math.max(roomSize.width, roomSize.depth) * 1.2;
-      const divisions = 20;
-      const gridHelper = new THREE.GridHelper(
-        gridSize,
-        divisions,
-        0xaaaaaa,
+    if (p.showGrid !== false) {
+      const g = new THREE.GridHelper(
+        Math.max(p.roomSize.width, p.roomSize.depth) * 1.2,
+        20,
+        0xbbbbbb,
         0xcccccc
       );
-      gridHelper.position.y = 0.01;
-      scene.add(gridHelper);
+      g.position.y = 0.002;
+      scene.add(g);
     }
 
-    // Room outline
-    if (showRoomOutline) {
-      const roomBoxGeo = new THREE.BoxGeometry(
-        roomSize.width,
-        roomSize.height,
-        roomSize.depth
-      );
-      const roomEdges = new THREE.EdgesGeometry(roomBoxGeo);
-      const roomLine = new THREE.LineSegments(
-        roomEdges,
+    if (p.showRoomOutline !== false) {
+      const rl = new THREE.LineSegments(
+        new THREE.EdgesGeometry(
+          new THREE.BoxGeometry(
+            p.roomSize.width,
+            p.roomSize.height,
+            p.roomSize.depth
+          )
+        ),
         new THREE.LineBasicMaterial({
           color: 0x999999,
           opacity: 0.3,
           transparent: true,
         })
       );
-      roomLine.position.y = roomSize.height / 2;
-      scene.add(roomLine);
+      rl.position.y = p.roomSize.height / 2;
+      scene.add(rl);
     }
 
-    // Create objects
-    objects.forEach((obj) => {
-      const { width: w, height: h, depth: d } = obj.size;
-      const pos = calculateObjectPosition(obj);
+    const meshes: THREE.Object3D[] = [];
+    const meshMap = new Map<string, THREE.Object3D>();
 
-      const geo = new THREE.BoxGeometry(w, h, d);
+    const state = {
+      renderer,
+      scene,
+      camera,
+      orbit,
+      tc,
+      meshes,
+      meshMap,
+      selectedMesh: null as THREE.Object3D | null,
+      selectLine: null as THREE.LineSegments | null,
+      hoverLine: null as THREE.LineSegments | null,
+      frameId: 0,
+      doSelect: (_mesh: THREE.Object3D) => {},
+      doDeselect: () => {},
+    };
+    S.current = state;
 
-      let color = 0x888888;
-      try {
-        color = parseInt(obj.color.replace("#", "0x"), 16);
-      } catch {
-        color = 0x888888;
+    const doSelect = (mesh: THREE.Object3D) => {
+      if (state.selectLine) {
+        scene.remove(state.selectLine);
+        state.selectLine = null;
+      }
+      state.selectedMesh = mesh;
+      tc?.attach(mesh);
+      state.selectLine = makeOutline(
+        mesh,
+        propsRef.current.selectedColor ?? "#06b6d4",
+        0.12
+      );
+      scene.add(state.selectLine);
+      propsRef.current.onObjectSelect?.(mesh.userData.id as string);
+    };
+
+    const doDeselect = () => {
+      tc?.detach();
+      state.selectedMesh = null;
+      if (state.selectLine) {
+        scene.remove(state.selectLine);
+        state.selectLine = null;
+      }
+      propsRef.current.onObjectSelect?.(null);
+    };
+
+    state.doSelect = doSelect;
+    state.doDeselect = doDeselect;
+
+    const addModelToScene = (obj: RoomObject) => {
+      if (!obj.modelUrl) return;
+
+      const py = calcPy(obj);
+
+      // Placeholder box while loading
+      const placeholder = makeBoxMesh(obj);
+      placeholder.position.set(obj.position.x, py, obj.position.z);
+      placeholder.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+      placeholder.castShadow = true;
+      placeholder.receiveShadow = true;
+      placeholder.userData = {
+        id: obj.id,
+        label: obj.name,
+        isPlaceholder: true,
+      };
+
+      scene.add(placeholder);
+      meshes.push(placeholder);
+      meshMap.set(obj.id, placeholder);
+
+      const applyModel = (rawModel: THREE.Group) => {
+        const s = S.current;
+        if (!s) return;
+
+        const model = rawModel.clone();
+
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const scale = Math.min(
+          obj.size.width / size.x,
+          obj.size.height / size.y,
+          obj.size.depth / size.z
+        );
+        model.scale.setScalar(scale);
+
+        // Căn đáy model về Y=0 của wrapper
+        placeModelOnFloor(model);
+
+        const wrapper = new THREE.Group();
+        wrapper.position.set(obj.position.x, py, obj.position.z);
+        wrapper.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+        wrapper.userData = { id: obj.id, label: obj.name };
+
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        wrapper.add(model);
+
+        s.scene.remove(placeholder);
+        const index = s.meshes.indexOf(placeholder);
+        if (index !== -1) s.meshes.splice(index, 1);
+
+        s.scene.add(wrapper);
+        s.meshes.push(wrapper);
+        s.meshMap.set(obj.id, wrapper);
+      };
+
+      if (modelCache.has(obj.modelUrl)) {
+        applyModel(modelCache.get(obj.modelUrl)!);
+        return;
       }
 
-      const mat = new THREE.MeshStandardMaterial({
-        color,
-        transparent: true,
-        opacity: 0.9,
-        roughness: 0.4,
-        emissive: 0x000000,
-      });
+      if (!loadingModels.current.has(obj.modelUrl)) {
+        loadingModels.current.add(obj.modelUrl);
+        gltfLoader.load(
+          obj.modelUrl,
+          (gltf) => {
+            modelCache.set(obj.modelUrl!, gltf.scene.clone());
+            applyModel(gltf.scene);
+            loadingModels.current.delete(obj.modelUrl!);
+          },
+          undefined,
+          (error) => {
+            console.error("Failed to load model:", obj.modelUrl, error);
+            loadingModels.current.delete(obj.modelUrl!);
+          }
+        );
+      }
+    };
 
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(pos.x, pos.y, pos.z);
-      mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { id: obj.id, name: obj.name };
-
-      scene.add(mesh);
-      objectsRef.current.set(obj.id, mesh);
-
-      // Add edges
-      const edges = new THREE.EdgesGeometry(geo);
-      const lines = new THREE.LineSegments(
-        edges,
-        new THREE.LineBasicMaterial({ color: 0x000000, opacity: 0.2 })
-      );
-      mesh.add(lines);
+    // Add initial objects
+    p.objects.forEach((obj) => {
+      if (obj.modelUrl) {
+        addModelToScene(obj);
+      } else {
+        const mesh = makeBoxMesh(obj);
+        const py = calcPy(obj);
+        mesh.position.set(obj.position.x, py, obj.position.z);
+        mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = { id: obj.id, label: obj.name };
+        scene.add(mesh);
+        meshes.push(mesh);
+        meshMap.set(obj.id, mesh);
+      }
     });
 
-    // Raycaster for hover/select
-    const raycaster = new THREE.Raycaster();
+    // Raycaster
+    const ray = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    let downPos: { x: number; y: number } | null = null;
 
-    const onMouseMove = (event: MouseEvent) => {
-      if (!renderer.domElement || !camera) return;
+    canvas.addEventListener("mousedown", (e) => {
+      downPos = { x: e.clientX, y: e.clientY };
+    });
 
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-      raycaster.setFromCamera(mouse, camera);
+      ray.setFromCamera(mouse, camera);
+      const hits = ray.intersectObjects(state.meshes, true);
+      const hit = hits.find(
+        (h) => h.object.userData?.id || h.object.parent?.userData?.id
+      );
+      const id = hit
+        ? (hit.object.userData?.id ?? hit.object.parent?.userData?.id ?? null)
+        : null;
 
-      const intersects = raycaster.intersectObjects(
-        Array.from(objectsRef.current.values())
+      propsRef.current.onObjectHover?.(id as string | null);
+
+      if (state.hoverLine) {
+        scene.remove(state.hoverLine);
+        state.hoverLine = null;
+      }
+
+      if (id && id !== state.selectedMesh?.userData?.id) {
+        const m = meshMap.get(id as string);
+        if (m) {
+          state.hoverLine = makeOutline(
+            m,
+            propsRef.current.hoverColor ?? "#3b82f6",
+            0.1
+          );
+          scene.add(state.hoverLine);
+        }
+      }
+    });
+
+    canvas.addEventListener("click", (e) => {
+      if (!propsRef.current.interactive) return;
+      if (
+        downPos &&
+        Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 5
+      ) {
+        downPos = null;
+        return;
+      }
+      downPos = null;
+
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      ray.setFromCamera(mouse, camera);
+      const hits = ray.intersectObjects(state.meshes, true);
+      const hit = hits.find(
+        (h) => h.object.userData?.id || h.object.parent?.userData?.id
       );
 
-      if (intersects.length > 0) {
-        const hitObject = intersects[0].object;
-        let root: THREE.Object3D = hitObject;
-        while (root.parent && !root.userData?.id) {
-          root = root.parent;
-        }
-
-        if (root.userData?.id) {
-          if (interactive && onObjectHover) {
-            onObjectHover(root.userData.id);
-          } else {
-            setInternalHoveredId(root.userData.id);
-          }
-        }
+      if (hit) {
+        const id = (hit.object.userData?.id ??
+          hit.object.parent?.userData?.id) as string;
+        const mesh = meshMap.get(id);
+        if (mesh) doSelect(mesh);
       } else {
-        if (interactive && onObjectHover) {
-          onObjectHover(null);
-        } else {
-          setInternalHoveredId(null);
-        }
+        doDeselect();
       }
-    };
+    });
 
-    const onMouseDown = (event: MouseEvent) => {
-      if (!interactive) return;
+    new ResizeObserver(() => {
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+      camera.aspect = wrap.clientWidth / wrap.clientHeight;
+      camera.updateProjectionMatrix();
+    }).observe(wrap);
 
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(
-        Array.from(objectsRef.current.values())
+    const camId = window.setInterval(() => {
+      propsRef.current.onCameraChange?.(
+        { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+        { x: orbit.target.x, y: orbit.target.y, z: orbit.target.z }
       );
+    }, 200);
 
-      if (intersects.length > 0) {
-        const hitObject = intersects[0].object;
-        let root: THREE.Object3D = hitObject;
-        while (root.parent && !root.userData?.id) {
-          root = root.parent;
-        }
-
-        if (root.userData?.id) {
-          const mesh = objectsRef.current.get(root.userData.id);
-          if (mesh && transformControlsRef.current) {
-            transformControlsRef.current.attach(mesh);
-            if (onObjectSelect) {
-              onObjectSelect(root.userData.id);
-            } else {
-              setInternalSelectedId(root.userData.id);
-            }
-          }
-        }
-      } else if (transformControlsRef.current) {
-        transformControlsRef.current.detach();
-        if (onObjectSelect) {
-          onObjectSelect(null);
-        } else {
-          setInternalSelectedId(null);
-        }
-      }
-    };
-
-    renderer.domElement.addEventListener("mousemove", onMouseMove);
-    if (interactive) {
-      renderer.domElement.addEventListener("mousedown", onMouseDown);
-    }
-
-    // Animation loop
-    const animate = () => {
-      frameRef.current = requestAnimationFrame(animate);
+    (function loop() {
+      state.frameId = requestAnimationFrame(loop);
       orbit.update();
       renderer.render(scene, camera);
-    };
-    animate();
+    })();
 
-    // Cleanup
     return () => {
-      renderer.domElement.removeEventListener("mousemove", onMouseMove);
-      if (interactive) {
-        renderer.domElement.removeEventListener("mousedown", onMouseDown);
-      }
-      cancelAnimationFrame(frameRef.current);
+      cancelAnimationFrame(state.frameId);
+      clearInterval(camId);
       orbit.dispose();
-      if (transformControlsRef.current) {
-        transformControlsRef.current.dispose();
-      }
+      tc?.dispose();
+      renderer.forceContextLoss();
       renderer.dispose();
+      if (wrap.contains(canvas)) wrap.removeChild(canvas);
+      S.current = null;
     };
-  }, [
-    roomSize,
-    objects,
-    interactive,
-    transformMode,
-    showGrid,
-    showRoomOutline,
-    backgroundColor,
-    containerSize,
-  ]);
+  }, []);
 
-  // Update transform mode
+  // Update objects when props.objects changes
   useEffect(() => {
-    if (transformControlsRef.current) {
-      transformControlsRef.current.setMode(transformMode);
-    }
-  }, [transformMode]);
+    const s = S.current;
+    if (!s) return;
 
-  // Handle hover highlight
-  useEffect(() => {
-    highlightObject(effectiveHoveredId ?? null);
-  }, [effectiveHoveredId]);
+    const newIds = new Set(props.objects.map((o) => o.id));
 
-  // Handle selection highlight
-  useEffect(() => {
-    if (transformControlsRef.current && effectiveSelectedId) {
-      const mesh = objectsRef.current.get(effectiveSelectedId);
-      if (mesh) {
-        transformControlsRef.current.attach(mesh);
+    s.meshMap.forEach((mesh, id) => {
+      if (!newIds.has(id)) {
+        s.scene.remove(mesh);
+        s.meshMap.delete(id);
+        const i = s.meshes.indexOf(mesh);
+        if (i !== -1) s.meshes.splice(i, 1);
       }
-    } else if (transformControlsRef.current && !effectiveSelectedId) {
-      transformControlsRef.current.detach();
-    }
-  }, [effectiveSelectedId]);
+    });
 
-  // Convert height prop to style
-  const getHeightStyle = () => {
-    if (typeof height === "number") {
-      return `${height}px`;
+    props.objects.forEach((obj) => {
+      const py = calcPy(obj);
+
+      if (s.meshMap.has(obj.id)) {
+        const mesh = s.meshMap.get(obj.id)!;
+        if (s.tc?.object !== mesh) {
+          mesh.position.set(obj.position.x, py, obj.position.z);
+          mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+        }
+        mesh.visible = obj.visible !== false;
+      } else {
+        if (obj.modelUrl) {
+          const placeholder = makeBoxMesh(obj);
+          placeholder.position.set(obj.position.x, py, obj.position.z);
+          placeholder.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+          placeholder.castShadow = true;
+          placeholder.receiveShadow = true;
+          placeholder.userData = {
+            id: obj.id,
+            label: obj.name,
+            isPlaceholder: true,
+          };
+
+          s.scene.add(placeholder);
+          s.meshes.push(placeholder);
+          s.meshMap.set(obj.id, placeholder);
+
+          const applyModel = (rawModel: THREE.Group) => {
+            const sc = S.current;
+            if (!sc) return;
+
+            const model = rawModel.clone();
+
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const scale = Math.min(
+              obj.size.width / size.x,
+              obj.size.height / size.y,
+              obj.size.depth / size.z
+            );
+            model.scale.setScalar(scale);
+
+            placeModelOnFloor(model);
+
+            const wrapper = new THREE.Group();
+            wrapper.position.set(obj.position.x, py, obj.position.z);
+            wrapper.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+            wrapper.userData = { id: obj.id, label: obj.name };
+
+            model.traverse((child) => {
+              if ((child as THREE.Mesh).isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+
+            wrapper.add(model);
+
+            sc.scene.remove(placeholder);
+            const pi = sc.meshes.indexOf(placeholder);
+            if (pi !== -1) sc.meshes.splice(pi, 1);
+
+            sc.scene.add(wrapper);
+            sc.meshes.push(wrapper);
+            sc.meshMap.set(obj.id, wrapper);
+          };
+
+          if (modelCache.has(obj.modelUrl)) {
+            applyModel(modelCache.get(obj.modelUrl)!);
+          } else if (!loadingModels.current.has(obj.modelUrl)) {
+            loadingModels.current.add(obj.modelUrl);
+            gltfLoader.load(
+              obj.modelUrl,
+              (gltf) => {
+                modelCache.set(obj.modelUrl!, gltf.scene.clone());
+                applyModel(gltf.scene);
+                loadingModels.current.delete(obj.modelUrl!);
+              },
+              undefined,
+              (error) => {
+                console.error("Failed to load model:", obj.modelUrl, error);
+                loadingModels.current.delete(obj.modelUrl!);
+              }
+            );
+          }
+        } else {
+          const mesh = makeBoxMesh(obj);
+          mesh.position.set(obj.position.x, calcPy(obj), obj.position.z);
+          mesh.rotation.y = THREE.MathUtils.degToRad(obj.rotation.y);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.userData = { id: obj.id, label: obj.name };
+          s.scene.add(mesh);
+          s.meshes.push(mesh);
+          s.meshMap.set(obj.id, mesh);
+        }
+      }
+    });
+  }, [props.objects]);
+
+  useEffect(() => {
+    S.current?.tc?.setMode(props.transformMode ?? "translate");
+  }, [props.transformMode]);
+
+  useEffect(() => {
+    const s = S.current;
+    if (!s) return;
+    if (props.selectedObjectId) {
+      const mesh = s.meshMap.get(props.selectedObjectId);
+      if (mesh && s.selectedMesh !== mesh) s.doSelect(mesh);
+    } else {
+      s.doDeselect();
     }
-    return height;
-  };
+  }, [props.selectedObjectId, props.selectedColor]);
 
   return (
     <div
-      ref={containerRef}
-      className={`relative ${className}`}
-      style={{ width: "100%", height: getHeightStyle() }}
+      ref={wrapRef}
+      className={props.className ?? ""}
+      style={{
+        width: "100%",
+        height:
+          typeof props.height === "number"
+            ? `${props.height}px`
+            : (props.height ?? "100%"),
+      }}
     />
   );
 }

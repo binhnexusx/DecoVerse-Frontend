@@ -133,7 +133,6 @@ export default function ShareProjectDialog({
 
   return (
     <>
-      {/* MAIN DIALOG */}
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg space-y-6">
           <DialogHeader>
@@ -162,7 +161,6 @@ export default function ShareProjectDialog({
             </div>
           </div>
 
-          {/* Invite */}
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <Input
@@ -190,8 +188,6 @@ export default function ShareProjectDialog({
             <p className="text-sm font-semibold text-slate-600">
               Who has access
             </p>
-
-            {/* OWNER */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9 border">
@@ -207,8 +203,6 @@ export default function ShareProjectDialog({
                 Owner
               </span>
             </div>
-
-            {/* COLLABORATORS */}
             {people.map((p) => (
               <div
                 key={p.id}
@@ -262,8 +256,6 @@ export default function ShareProjectDialog({
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* CONFIRM REMOVE */}
       <Dialog open={removeId !== null} onOpenChange={() => setRemoveId(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
