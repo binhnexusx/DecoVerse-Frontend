@@ -25,6 +25,7 @@ export default function ProjectDetailPage() {
   const [commentOpen, setCommentOpen] = useState(false);
   const role = "Client";
   const canComment = role === "Client" || role === "Owner";
+
   useEffect(() => {
     const fetchDetail = async () => {
       try {
@@ -76,6 +77,7 @@ export default function ProjectDetailPage() {
             imageUrl={project.previewUrl}
           />
         </div>
+
         <div className="p-6 bg-white border shadow-sm rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <h3 className="flex items-center gap-2 font-bold text-slate-800">
@@ -99,18 +101,28 @@ export default function ProjectDetailPage() {
               />
             </div>
 
-            <div className="relative overflow-hidden border shadow-inner rounded-xl bg-slate-100">
+            <div
+              className="relative overflow-hidden border shadow-inner rounded-xl bg-slate-100"
+              style={{ height: "500px" }}
+            >
               <div className="absolute top-3 left-3 z-10 bg-primary-500 text-white text-[10px] px-2 py-1 rounded uppercase font-bold backdrop-blur-sm">
                 Interactive 3D View
               </div>
-              {selectedVersion?.designData && (
+              {selectedVersion?.designData ? (
                 <Room3DViewer
                   roomSize={selectedVersion.designData.roomSize}
-                  objects={selectedVersion.designData.objects}
+                  objects={(selectedVersion.designData.objects || []).map(
+                    (o: any) => ({ ...o, visible: true })
+                  )}
                   height="100%"
+                  className="absolute inset-0"
                   hoveredObjectId={hoveredObject}
                   onObjectHover={setHoveredObject}
                 />
+              ) : (
+                <div className="flex items-center justify-center w-full h-full">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
               )}
             </div>
           </div>
@@ -141,8 +153,10 @@ export default function ProjectDetailPage() {
           versions={project.versions}
           onSelectVersion={(v: any) => setSelectedVersion(v)}
           selectedId={selectedVersion?.id}
+          projectPreviewUrl={project.previewUrl}
         />
       </div>
+
       {canComment && (
         <CommentButton onClick={() => setCommentOpen((prev) => !prev)} />
       )}
