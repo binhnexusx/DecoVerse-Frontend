@@ -52,11 +52,7 @@ interface FurnitureItem {
   cloudinaryUrl: string;
   thumbnailUrl?: string;
   publicId: string;
-  size?: {
-    width: number;
-    height: number;
-    depth: number;
-  };
+  size?: { width: number; height: number; depth: number };
 }
 
 interface RoomObject {
@@ -68,11 +64,60 @@ interface RoomObject {
   position: { x: number; y: number; z: number };
   size: { width: number; height: number; depth: number };
   rotation: { y: number };
-  scale: { x: number; y: number; z: number }; // Thêm scale
+  scale: { x: number; y: number; z: number };
   visible?: boolean;
   furnitureItemId?: string;
   modelUrl?: string;
 }
+
+// ─── Sanitize helpers ─────────────────────────────────────────────────────────
+
+function safeN(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  return isFinite(n) ? n : fallback;
+}
+
+/**
+ * Sanitize một RoomObject từ DB.
+ * Nếu size bị hỏng (NaN / 0 / âm) → reset về 1.
+ * Nếu position bị hỏng → reset về 0.
+ */
+function sanitizeObject(obj: any): RoomObject {
+  const w = safeN(obj.size?.width, 1);
+  const h = safeN(obj.size?.height, 1);
+  const d = safeN(obj.size?.depth, 1);
+
+  const sizeOk = w > 0 && h > 0 && d > 0;
+  if (!sizeOk) {
+    console.warn(
+      `[EditorPage] Corrupt size for "${obj.name}", resetting to 1×1×1`,
+      obj.size
+    );
+  }
+
+  return {
+    ...obj,
+    size: {
+      width: sizeOk ? w : 1,
+      height: sizeOk ? h : 1,
+      depth: sizeOk ? d : 1,
+    },
+    position: {
+      x: safeN(obj.position?.x, 0),
+      y: safeN(obj.position?.y, 0),
+      z: safeN(obj.position?.z, 0),
+    },
+    rotation: { y: safeN(obj.rotation?.y, 0) },
+    scale: {
+      x: safeN(obj.scale?.x, 1) || 1,
+      y: safeN(obj.scale?.y, 1) || 1,
+      z: safeN(obj.scale?.z, 1) || 1,
+    },
+    visible: true,
+  };
+}
+
+// ─── Components ───────────────────────────────────────────────────────────────
 
 function LibraryItem({
   item,
@@ -96,8 +141,7 @@ function LibraryItem({
       "bg-indigo-50",
       "bg-orange-50",
     ];
-    const index = name.length % colors.length;
-    return colors[index];
+    return colors[name.length % colors.length];
   };
 
   return (
@@ -110,11 +154,9 @@ function LibraryItem({
       onDragEnd={() => setIsDragging(false)}
       onMouseEnter={() => setShow3D(true)}
       onMouseLeave={() => setShow3D(false)}
-      className={`
-        relative flex flex-col rounded-lg border overflow-hidden transition-all cursor-move
+      className={`relative flex flex-col rounded-lg border overflow-hidden transition-all cursor-move
         ${isDragging ? "opacity-50 scale-95 shadow-lg" : "hover:border-cyan-400 hover:shadow-md"}
-        border-slate-200 bg-white
-      `}
+        border-slate-200 bg-white`}
       style={{ height: "170px", width: "100%" }}
     >
       <div className="relative w-full h-32 overflow-hidden bg-slate-50">
@@ -147,14 +189,12 @@ function LibraryItem({
             )}
           </div>
         )}
-
         {item.cloudinaryUrl && !show3D && (
           <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-cyan-500 text-white rounded text-[8px] font-medium">
             3D
           </div>
         )}
       </div>
-
       <div className="px-2 py-1.5 flex-1">
         <p
           className="text-xs font-medium truncate text-slate-700"
@@ -167,7 +207,6 @@ function LibraryItem({
           {item.category}
         </p>
       </div>
-
       {item.size && (
         <div className="absolute bottom-8 left-1 px-1 py-0.5 bg-black/60 text-white rounded text-[8px]">
           {item.size.width.toFixed(1)}x{item.size.height.toFixed(1)}x
@@ -241,12 +280,10 @@ function SortableObjectItem({
       >
         <GripVertical className="w-4 h-4 text-slate-400" />
       </div>
-
       <div
         className="flex-shrink-0 w-3 h-3 rounded-full ring-1 ring-black/10"
         style={{ backgroundColor: obj.color }}
       />
-
       <button
         className="flex-1 min-w-0 text-left"
         onClick={(e) => {
@@ -262,18 +299,15 @@ function SortableObjectItem({
           {obj.category || obj.type}
         </p>
       </button>
-
       {obj.modelUrl && (
         <div
           className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"
-          title="3D model loaded"
+          title="3D model"
         />
       )}
-
       {isSelected && (
         <ChevronRight className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
       )}
-
       <div
         className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
         onPointerDown={(e) => e.stopPropagation()}
@@ -284,7 +318,6 @@ function SortableObjectItem({
             onToggleVisibility();
           }}
           className="p-1 rounded hover:bg-slate-200"
-          title={obj.visible ? "Hide" : "Show"}
         >
           {obj.visible ? (
             <Eye className="w-3.5 h-3.5 text-slate-500" />
@@ -298,7 +331,6 @@ function SortableObjectItem({
             onDuplicate();
           }}
           className="p-1 rounded hover:bg-slate-200"
-          title="Duplicate"
         >
           <Copy className="w-3.5 h-3.5 text-slate-500" />
         </button>
@@ -308,7 +340,6 @@ function SortableObjectItem({
             onDelete();
           }}
           className="p-1 rounded hover:bg-red-100"
-          title="Delete"
         >
           <Trash2 className="w-3.5 h-3.5 text-red-500" />
         </button>
@@ -343,6 +374,8 @@ function TransformBtn({
     </button>
   );
 }
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EditorPage() {
   const { id } = useParams();
@@ -426,17 +459,16 @@ export default function EditorPage() {
         const versionData = vId
           ? data.versions.find((v: { id: string }) => v.id === vId)
           : data.versions[0];
+
         if (versionData) {
           setCurrentVersion(versionData);
-          setObjects(
-            (versionData.designData.objects || []).map((obj: any) => ({
-              ...obj,
-              visible: true,
-              furnitureItemId: obj.furnitureItemId,
-              modelUrl: obj.modelUrl,
-              scale: obj.scale || { x: 1, y: 1, z: 1 }, // Thêm scale mặc định nếu không có
-            }))
+
+          // Sanitize tất cả objects từ DB — fix corrupt size/position
+          const loadedObjects = (versionData.designData.objects || []).map(
+            sanitizeObject
           );
+
+          setObjects(loadedObjects);
         }
       } catch (err) {
         console.error("Load project error:", err);
@@ -447,14 +479,44 @@ export default function EditorPage() {
     loadProject();
   }, [id, location.search, getAccessTokenSilently]);
 
-  const handleObjectUpdate = (
-    objectId: string,
-    updates: Partial<RoomObject>
-  ) => {
-    setObjects((prev) =>
-      prev.map((obj) => (obj.id === objectId ? { ...obj, ...updates } : obj))
-    );
-  };
+  const handleObjectUpdate = useCallback(
+    (objectId: string, updates: Partial<RoomObject>) => {
+      setObjects((prev) =>
+        prev.map((obj) => {
+          if (obj.id !== objectId) return obj;
+
+          // Merge updates nhưng sanitize size/position phòng NaN
+          const merged = { ...obj, ...updates };
+
+          // Đảm bảo size luôn hợp lệ sau update
+          const w = safeN(merged.size?.width, obj.size.width);
+          const h = safeN(merged.size?.height, obj.size.height);
+          const d = safeN(merged.size?.depth, obj.size.depth);
+
+          return {
+            ...merged,
+            size: {
+              width: w > 0 ? w : obj.size.width,
+              height: h > 0 ? h : obj.size.height,
+              depth: d > 0 ? d : obj.size.depth,
+            },
+            position: {
+              x: isFinite(merged.position?.x)
+                ? merged.position.x
+                : obj.position.x,
+              y: isFinite(merged.position?.y)
+                ? merged.position.y
+                : obj.position.y,
+              z: isFinite(merged.position?.z)
+                ? merged.position.z
+                : obj.position.z,
+            },
+          };
+        })
+      );
+    },
+    []
+  );
 
   const handleDragStart = (_e: DragStartEvent) => {
     setIsDragActive(true);
@@ -477,11 +539,9 @@ export default function EditorPage() {
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-
       try {
         const itemData = e.dataTransfer.getData("application/json");
         if (!itemData) return;
-
         const item: FurnitureItem = JSON.parse(itemData);
 
         const roomCenter = currentVersion?.designData.roomSize
@@ -499,9 +559,17 @@ export default function EditorPage() {
           category: item.category,
           color: item.color || "#888888",
           position: roomCenter,
-          size: item.size || { width: 1, height: 1, depth: 1 },
+          // Đảm bảo size từ library luôn hợp lệ
+          size: {
+            width:
+              item.size?.width && item.size.width > 0 ? item.size.width : 1,
+            height:
+              item.size?.height && item.size.height > 0 ? item.size.height : 1,
+            depth:
+              item.size?.depth && item.size.depth > 0 ? item.size.depth : 1,
+          },
           rotation: { y: 0 },
-          scale: { x: 1, y: 1, z: 1 }, // Thêm scale mặc định
+          scale: { x: 1, y: 1, z: 1 },
           visible: true,
           furnitureItemId: item.id,
           modelUrl: item.cloudinaryUrl,
@@ -526,19 +594,20 @@ export default function EditorPage() {
     setObjects((prev) => {
       const src = prev.find((obj) => obj.id === objectId);
       if (!src) return prev;
-      const newObj: RoomObject = {
-        ...src,
-        id: `${objectId}-copy-${Date.now()}`,
-        name: `${src.name} (Copy)`,
-        position: {
-          ...src.position,
-          x: src.position.x + 0.5,
-          z: src.position.z + 0.5,
+      return [
+        ...prev,
+        {
+          ...src,
+          id: `${objectId}-copy-${Date.now()}`,
+          name: `${src.name} (Copy)`,
+          position: {
+            ...src.position,
+            x: src.position.x + 0.5,
+            z: src.position.z + 0.5,
+          },
+          visible: true,
         },
-        scale: src.scale || { x: 1, y: 1, z: 1 }, // Copy scale
-        visible: true,
-      };
-      return [...prev, newObj];
+      ];
     });
     toast.success("Duplicated");
   };
@@ -562,9 +631,25 @@ export default function EditorPage() {
     setSaving(true);
     try {
       const token = await getAccessTokenSilently();
-      const objectsToSave = objects.map(
-        ({ visible: _visible, ...rest }) => rest
-      );
+
+      // Strip `visible`, sanitize một lần nữa trước khi lưu
+      const objectsToSave = objects.map(({ visible: _v, ...rest }) => {
+        const s = rest.size;
+        return {
+          ...rest,
+          size: {
+            width: isFinite(s.width) && s.width > 0 ? s.width : 1,
+            height: isFinite(s.height) && s.height > 0 ? s.height : 1,
+            depth: isFinite(s.depth) && s.depth > 0 ? s.depth : 1,
+          },
+          position: {
+            x: isFinite(rest.position.x) ? rest.position.x : 0,
+            y: isFinite(rest.position.y) ? rest.position.y : 0,
+            z: isFinite(rest.position.z) ? rest.position.z : 0,
+          },
+        };
+      });
+
       await axios.post(
         `${API_BASE}/projects/${id}/version`,
         {
@@ -610,6 +695,7 @@ export default function EditorPage() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-100">
+      {/* Header */}
       <div className="z-10 flex items-center justify-between px-5 bg-white border-b shadow-sm h-14 shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
@@ -620,7 +706,6 @@ export default function EditorPage() {
             {project?.name}
           </h1>
         </div>
-
         <div className="flex items-center gap-1.5">
           <TransformBtn
             active={transformMode === "translate"}
@@ -641,7 +726,6 @@ export default function EditorPage() {
             onClick={() => setTransformMode("scale")}
           />
         </div>
-
         <Button
           onClick={handleSaveVersion}
           disabled={saving}
@@ -682,7 +766,6 @@ export default function EditorPage() {
               initialCameraPosition={null}
               initialCameraTarget={null}
             />
-
             <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/60 text-white rounded-full text-xs font-medium backdrop-blur-sm pointer-events-none">
               {transformMode === "translate" && (
                 <>
@@ -700,7 +783,6 @@ export default function EditorPage() {
                 </>
               )}
             </div>
-
             {selectedObj && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-cyan-600 text-white rounded-full text-xs font-medium shadow-lg pointer-events-none">
                 <div
@@ -715,6 +797,7 @@ export default function EditorPage() {
           </div>
         )}
 
+        {/* Right panel */}
         <div className="flex flex-col bg-white border-l shadow-sm w-80">
           <div className="flex border-b">
             <button
@@ -767,7 +850,6 @@ export default function EditorPage() {
                   ))}
                 </select>
               </div>
-
               <div className="flex-1 p-3 overflow-y-auto">
                 {loadingLibrary ? (
                   <div className="flex items-center justify-center h-40">
@@ -790,7 +872,6 @@ export default function EditorPage() {
                   </div>
                 )}
               </div>
-
               <div className="px-3 py-2 border-t bg-slate-50">
                 <p className="flex items-center gap-1.5 text-xs text-slate-500">
                   <Move className="w-3 h-3" />
@@ -807,7 +888,6 @@ export default function EditorPage() {
                   to reorder
                 </p>
               </div>
-
               <div className="flex-1 p-3 overflow-y-auto">
                 <DndContext
                   sensors={sensors}
@@ -864,7 +944,6 @@ export default function EditorPage() {
                     </div>
                     <Info className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                   </div>
-
                   <div className="px-4 py-3 space-y-2.5 bg-slate-50">
                     <div>
                       <p className="mb-1 text-xs font-medium tracking-wide uppercase text-slate-400">
@@ -924,7 +1003,7 @@ export default function EditorPage() {
                               {axis.toUpperCase()}
                             </p>
                             <p className="font-mono text-xs font-semibold text-slate-700">
-                              {selectedObj.scale[axis].toFixed(2)}
+                              {(selectedObj.scale?.[axis] ?? 1).toFixed(2)}
                             </p>
                           </div>
                         ))}

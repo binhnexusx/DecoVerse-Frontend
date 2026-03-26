@@ -67,7 +67,7 @@ export default function ProjectsPage() {
               <div className="mt-4 flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                 <span>{new Date(project.createdAt).toLocaleDateString()}</span>
                 <span className="text-cyan-600">
-                  {project.versions?.length || 0} versions
+                  {project._count?.versions || 1} versions
                 </span>
               </div>
             </div>
