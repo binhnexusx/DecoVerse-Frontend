@@ -1,6 +1,5 @@
 import axios from "axios";
-
-const API_URL = "http://localhost:3000/api";
+import { API_BASE } from "@/lib/api";
 
 const getAuthHeaders = (token: string) => ({
   headers: {
@@ -12,7 +11,7 @@ const getAuthHeaders = (token: string) => ({
 export const getRecentProjects = async (token: string) => {
   try {
     const response = await axios.get(
-      `${API_URL}/projects`,
+      `${API_BASE}/projects`,
       getAuthHeaders(token)
     );
     return response.data;
@@ -25,7 +24,7 @@ export const getRecentProjects = async (token: string) => {
 export const getProjectDetail = async (id: string, token: string) => {
   try {
     const response = await axios.get(
-      `${API_URL}/projects/${id}`,
+      `${API_BASE}/projects/${id}`,
       getAuthHeaders(token)
     );
     return response.data;
@@ -38,7 +37,7 @@ export const getProjectDetail = async (id: string, token: string) => {
 export const getCollaborationCount = async (token: string) => {
   try {
     const response = await axios.get(
-      `${API_URL}/projects/count/collaborations`,
+      `${API_BASE}/projects/count/collaborations`,
       getAuthHeaders(token)
     );
     return response.data;
