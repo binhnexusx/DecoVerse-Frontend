@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 . e n v . d o c k e r 
 .env
+.env.production
  
  
